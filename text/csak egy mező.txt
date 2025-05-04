@@ -1,0 +1,20 @@
+Csak egy mezőt kell felrakni
+2017. március 26. - TanacsLajos
+
+Na szia, szevasz, van ez a feladat, de csak annyi az egész, hogy a negyedik képernyőre valahova egy mezőt gyorsan fel kéne rakni, érted, megvan az egész egy óra alatt, még egy kávé is belefér cigivel! Mindegy hova, tökmindegy tényleg. Mondjuk oda, középre, ott nézne ki a legjobban, kicsit a mellette levőket arrébb tolod, és kész. De persze normálisan nézzen azért, ki nehogy szétessen az oldal.
+
+Na és akkor a mezőbe be lehet írni az ügyfél kedvenc gyümölcsét. Persze, akármit bele lehet írni. Vagy várjá, nem is, mondjuk legyen alma, banán, eper, kiwi, egyéb. Ilyen legördülőbe, jaja. Újat beírni? Ja, lehessen azt is! Az király, akkor legyen olyan, hogy lehet választani is, meg akármit beírni! És amit beírt, az legközelebb is legyen ott, de csak annál, aki beírta. Milyen hülyeség lenne bazzeg, hogy a Karcsi beírja, és akkor a Petránál is látszik, hogy Kókusz. A kókusz amúgy nem is gyümölcs, vagy igen? Áhh tökmindegy, ezt majd úgyis tudja a program, hogy érted beírsz mondjuk olyat hogy répa, azt megmondja, hogy Hiba, ez nem gyümölcs és nem fogadja el. De ez alap, érted.
+
+A riportra? Persze, hogy bele kell rakni, minek kérnénk be a kedvenc gyümölcsöt, ha utána nem kerül bele?? Normális vagy, hát nem puszira építjük az ügyféladatbázist! Persze, legyen benne, de rendesen az összesben, nem csak úgy összebarmolva. Úgy legyen má, hogy akkor dobjatok már mellé egy előrejelző részt, ami a kedvenc gyümölcs, a testmagasság és a születési hónap alapján kiszámolja, hogy mikor akarja a szerződést felmondani az ügyfél! Nemtom hogy csinálja, biztos van rá valami algaritmus.
+
+Jaja, meg a nyomtatványokra is kell, persze, most, hogy mondod. Mittomén hova, valahova odafér még biztos. Rád bízom, totál mindegy. Csak ne az utolsó oldalra! Meg az elsőre se! Ja, tényleg, a nyomtatványra jobb lenne, ha a gyümölcs képét nyomtatnánk rá. Valami vicces grafikával, ami illik a céges imázsba.
+
+De tényleg ennyi az egész. Milyen specifikáció? Minek az tesókám, most mondtam el két perc alatt az egészet, bakker tovább tart specifikációt írni ebből, mint leprogramozni az egészet. Nekem nincs időm ilyen hülye dokumentációkat írogatni, te vagy az IT-s, oldd má meg, a te dolgod! Az autókereskedésben se az van, hogy bemegyek az új 3-as BMW-ért, aztán azt mondják, hogy specifikáljam a váltóáttételeket!
+
+Na, szóval akkor srácok üssétek össze, annyira nem sürgős, mondjuk holnap délre elég lesz.
+
+Mi van??? Mi az, hogy négy hét? NORMÁLIS VAGY? Nekem ne gyere ezzel a hülyeséggel, nem űrrakétát építesz, egy ványadt mezőről van szó! Mindent elmondtam, amit tudni kell róla, mi a rákér nem jegyzeteltél rendesen?? Mit problémázol itt nekem az adatbázis szerkezettel? Meg a kódinkontintenciával vagy mivel? Utálom, amikor a technikai blablával takarózik valaki. Nekem megoldások kellenek, nem kifogások!
+
+Tesztelni három napig?? Bazzeg neked elment az eszed, hát nem szívgyógyszert kell készíteni, csak egy nyomorúságos mezőt kértem, ennyi az egész, elképesztőek vagytok. Mi lett volna, ha egy új képernyőt kérek? Azt mondjátok, két év megcsinálni??
+
+Áhh, utálom ezt az egész nyomorult rendszert, sokkal jobb volt, amíg az Emese csinálta Excelben az egészet. Abban mindig mindent megvolt egy óra alatt. És nem is kellett bele mezőket fölvenni, alapból volt benne egy csomó!
