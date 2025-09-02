@@ -1,0 +1,8 @@
+FROM /home/zsoltii/Letöltések/ai/hugging face/google/madlad400-10b-mt/model-q6k.gguf
+
+PARAMETER stop "<2en>"
+PARAMETER stop "<2hu>"
+PARAMETER num_ctx 512
+
+# Egyszerű TEMPLATE: feltételezzük, hogy a felhasználó megadja a célnyelvi tokent.
+TEMPLATE "<2hu> {{ .Prompt }}"

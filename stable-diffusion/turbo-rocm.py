@@ -1,10 +1,8 @@
-from diffusers import StableDiffusionPipeline
-import torch
-import re
 import datetime
-import os
+import re
 
-model_id = "sd-legacy/stable-diffusion-v1-5"
+import torch
+from diffusers import AutoPipelineForText2Image
 
 # Detect ROCm/AMD GPU and set device accordingly
 if torch.version.hip is not None:
@@ -20,24 +18,23 @@ if torch.cuda.is_available():
 print(torch.version.cuda)
 print('torch.version.hip:', getattr(torch.version, 'hip', None))
 
-pipe = StableDiffusionPipeline.from_pretrained(model_id)
-pipe.enable_model_cpu_offload()
-#pipe.enable_sequential_cpu_offload()
-pipe = pipe.to(device)
-#
-# width = 512*2
-# height = 512*2
+print("load model...")
+model = AutoPipelineForText2Image.from_pretrained("stabilityai/sd-turbo")
+print(f"Model loaded: {getattr(model, 'name_or_path', str(model))}")
+model.enable_model_cpu_offload()
+model.enable_sequential_cpu_offload()
+model.to(device)
 
-prompt = "red dress thin woman with long brown hair in anime style and cinematic lighting"
-
+prompt = "young children playing on playground, cinematic lights"
 safe_prompt = re.sub(r"[^a-zA-Z]", "_", prompt)
 
-generationCount = 1
+generationCount = 3
 for i in range(generationCount):
     print(i + 1, "of " + str(generationCount) + ": Generating image for prompt:", prompt)
-    image = pipe(prompt).images[0]
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    image = model(prompt=prompt, num_inference_steps=1, guidance_scale=0.0).images[0]
+    print("save paint...")
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     image.save(timestamp + "_" + safe_prompt + ".png")
-#
-# image = pipe(prompt, height=height, width=width).images[0]
-# image.save(safe_prompt + "_" + str(width) + "x" + str(height) + ".png")
+    print(i + 1, "of " + str(generationCount) + ": Generating image done for prompt:", prompt)
+
+print("done")

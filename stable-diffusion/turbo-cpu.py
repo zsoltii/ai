@@ -11,7 +11,7 @@ width = 512
 height = 512
 
 
-prompt = "Fotórealisztikus, idős férfi, mély ráncok, fekete-fehér"
+prompt = "old man with mustache, gray hair, white skin, only face"
 safe_prompt = re.sub(r"[^a-zA-Z]", "_", prompt)
 
 generationCount = 10
