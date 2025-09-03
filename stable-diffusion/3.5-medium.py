@@ -5,7 +5,7 @@ import re
 from diffusers import StableDiffusion3Pipeline
 from huggingface_hub import login
 
-login("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")  # Replace with your Hugging Face token
+login("sdfsd")  # Replace with your Hugging Face token
 pipe = StableDiffusion3Pipeline.from_pretrained("stabilityai/stable-diffusion-3.5-medium")
 pipe = pipe.to("cuda")
 

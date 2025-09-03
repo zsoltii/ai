@@ -3,7 +3,7 @@ import re
 import datetime
 from diffusers import StableDiffusion3Pipeline
 from huggingface_hub import login
-login("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")  # Replace with your Hugging Face token
+login("asd")  # Replace with your Hugging Face token
 pipe = StableDiffusion3Pipeline.from_pretrained("stabilityai/stable-diffusion-3-medium-diffusers")
 pipe = pipe.to("cuda")
 pipe.enable_model_cpu_offload() # use cpu is necessary

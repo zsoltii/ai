@@ -1,34 +1,32 @@
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from diffusers import DiffusionPipeline
 import torch
 
+from util.select_device import select_device
+from util.log_available_gpus import log_available_gpus
+from util.save_image import save_image
+
+device = select_device()
+log_available_gpus()
+
 modelName = "stabilityai/stable-diffusion-xl-base-1.0"
-
-# Detect ROCm/AMD GPU and set device accordingly
-if torch.version.hip is not None:
-    device = torch.device('cuda')  # ROCm uses 'cuda' as device string
-    print('ROCm detected, using device:', device)
-else:
-    device = torch.device('cpu')
-    print('No ROCm detected, using CPU')
-
-print(torch.cuda.is_available())
-if torch.cuda.is_available():
-    print(f'device name [0]:', torch.cuda.get_device_name(0))
-print(torch.version.cuda)
-print('torch.version.hip:', getattr(torch.version, 'hip', None))
-
-#for cpu
-#device = torch.device('cpu')
 
 if(device.type == 'cpu'):
     pipe = DiffusionPipeline.from_pretrained(modelName, use_safetensors=True)
 else:
-    pipe = DiffusionPipeline.from_pretrained(modelName, torch_dtype=torch.float16, use_safetensors=True, variant="fp16")
-pipe.enable_model_cpu_offload()
-pipe.enable_sequential_cpu_offload()
+    pipe = DiffusionPipeline.from_pretrained(modelName, dtype=torch.float16, use_safetensors=True, variant="fp16")
+    pipe.enable_model_cpu_offload()
+    pipe.enable_sequential_cpu_offload()
 pipe.to(device)
 
-prompt = "An astronaut riding a green horse"
+prompt = "long hair women sitting on the beach, paint"
 
-images = pipe(prompt=prompt).images[0]
-images[0].save("test.png")
+generationCount = 3
+num_inference_steps = 50
+for i in range(generationCount):
+    print(i + 1, "of " + str(generationCount) + ": Generating image for prompt:", prompt)
+    image = pipe(prompt=prompt, num_inference_steps=num_inference_steps).images[0]
+    save_image(prompt, image, modelName, num_inference_steps)
