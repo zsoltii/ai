@@ -1,0 +1,4 @@
+FROM phi4:latest
+
+PARAMETER num_ctx 16384
+

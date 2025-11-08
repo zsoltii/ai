@@ -1,0 +1,4 @@
+FROM granite4:tiny-h
+
+PARAMETER num_ctx 1048576
+

@@ -1,0 +1,5 @@
+FROM gemma3:12b
+
+# Set context size to 128K (131072)
+PARAMETER num_ctx 131072
+

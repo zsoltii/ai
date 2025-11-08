@@ -1,0 +1,4 @@
+FROM phi4-reasoning:latest
+
+PARAMETER num_ctx 32768
+

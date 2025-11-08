@@ -19,15 +19,15 @@ log_available_gpus()
 print("load model...")
 model = AutoPipelineForText2Image.from_pretrained(MODEL)
 print(f"Model loaded: {getattr(model, 'name_or_path', str(model))}")
-if device.type == 'cuda':
-    model.enable_model_cpu_offload()
-    model.enable_sequential_cpu_offload()
+# if device.type == 'cuda':
+    # model.enable_model_cpu_offload()
+    # model.enable_sequential_cpu_offload()
 model.to(device)
 
 prompt = "long hair women sitting on the beach, paint"
 
-generationCount = 3
-num_inference_steps = 10
+generationCount = 1
+num_inference_steps = 1
 for i in range(generationCount):
     print(i + 1, "of " + str(generationCount) + ": Generating image for prompt:", prompt)
     image = model(prompt=prompt, num_inference_steps=num_inference_steps, guidance_scale=0.0).images[0]
