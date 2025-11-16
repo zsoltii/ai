@@ -14,10 +14,19 @@ echo "Installing PyTorch 2.9.0 with ROCm 6.4 support..."
 conda run -n rocm pip install torch==2.9.0+rocm6.4 torchvision==0.24.0+rocm6.4 torchaudio==2.9.0+rocm6.4 pytorch_triton==3.4.0 --extra-index-url https://download.pytorch.org/whl/
 echo "Installing additional dependencies..."
 
-# FIXME: delete torch 2.9 and install torch 2.8
-conda run -n rocm pip install sentencepiece transformers hf_xet accelerate diffusers protobuf xformers sacremoses
+conda run -n rocm pip install sentencepiece transformers hf_xet accelerate diffusers protobuf xformers sacremoses peft scipy backoff
+
+# install bitsandbytes rocm version
+sudo apt-get install -y build-essential cmake
+rm -rf bitsandbytes
+git clone -b multi-backend-refactor https://github.com/bitsandbytes-foundation/bitsandbytes.git && cd bitsandbytes/
+cmake -DCOMPUTE_BACKEND=hip -S .
+make
+conda run -n rocm pip install -e .
+rm -rf bitsandbytes
+
 
 # clear huggingface model cache
 #rm -rf ~/.cache/huggingface/hub/
 
-echo "Conda environment 'rocm' witcd h PyTorch 2.9.0 is set up successfully."
+echo "Conda environment 'rocm' with PyTorch 2.9.0 is set up successfully."

@@ -18,4 +18,4 @@ conda run -n rocm pip install sentencepiece transformers hf_xet accelerate diffu
 # clear huggingface model cache
 #rm -rf ~/.cache/huggingface/hub/
 
-echo "Conda environment 'rocm' witcd h PyTorch 2.8.0 is set up successfully."
+echo "Conda environment 'rocm' with PyTorch 2.8.0 is set up successfully."

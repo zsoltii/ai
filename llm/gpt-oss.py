@@ -21,7 +21,7 @@ model_id = "openai/gpt-oss-20b"
 # }
 
 max_memory = {
-    0: "14GiB", # Reduce memory allocation for GPU 0
+    0: "10GiB", # Reduce memory allocation for GPU 0
     "cpu": "30Gib"
 }
 
