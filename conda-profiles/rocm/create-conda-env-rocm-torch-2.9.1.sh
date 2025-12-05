@@ -7,8 +7,8 @@ fi
 
 conda create --name rocm python=3.13 -y
 
-TORCH_VERSION="2.9.0+rocm6.4"
-TORCHVISION_VERSION="0.24.0+rocm6.4"
+TORCH_VERSION="2.9.1+rocm6.4"
+TORCHVISION_VERSION="0.24.1+rocm6.4"
 PYTORCH_TRITION_VERSION="3.4.0"
 
 echo "Activating conda environment 'rocm'..."
