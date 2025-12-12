@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
+from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer, AutoConfig, BitsAndBytesConfig
 import torch
 import re
 from util.select_device import select_device
@@ -19,19 +19,52 @@ device = select_device()
 hfh_login()
 
 # input token number for all models: 512
-MODEL = "facebook/m2m100_1.2B"
+# MODEL = "facebook/m2m100_1.2B"
 # MODEL = "NYTK/translation-m2m100-1.2B-multi12-hungarian" # input token number 256!!!
 # MODEL = "facebook/m2m100_418M"
-# MODEL = "facebook/m2m100-12B-last-ckpt"
+MODEL = "facebook/m2m100-12B-last-ckpt"
 # MODEL = "facebook/m2m100-12B-avg-5-ckpt"
 # MODEL = "facebook/m2m100-12B-avg-10-ckpt"
+
+max_memory = {
+    0: "14Gib",  # Reduce memory allocation for GPU 0
+    "cpu": "85Gib"
+}
+
+os.makedirs("./offload", exist_ok=True)
+
+print("Using max_memory config:", max_memory)
+
+# --- Kvantálási Konfiguráció ---
+# A modell eredeti kvantálási sémájának felülbírálása.
+config = AutoConfig.from_pretrained(MODEL)
+
+if hasattr(config, "quantization_config"):
+    print(f"Original quantization_config {config.quantization_config}")
+    del config.quantization_config
+    print(f"Original quantization_config deleted!")
+
+# Létrehozunk egy új, 4-bites kvantálási konfigurációt, amely támogatja a CPU offload-ot.
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.half,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_storage=torch.uint8,
+    llm_int8_enable_fp32_cpu_offload=True,  # Engedélyezi a CPU-ra történő offload-ot
+)
 
 print("Loading tokenizer and model (this may take a while)...")
 
 model = M2M100ForConditionalGeneration.from_pretrained(
     MODEL,
-    dtype=torch.float32,
-    device_map="auto"
+    config=config,
+    quantization_config=quantization_config,
+    dtype=torch.half,
+    device_map="auto",
+    max_memory=max_memory,
+    offload_folder="./offload",
+    low_cpu_mem_usage=False,
 )
 
 print(f"Model loaded: {getattr(model, 'name_or_path', str(model))}")
@@ -53,7 +86,7 @@ TARGET_LANGUAGE = "hu"
 
 tokenizer.src_lang = SOURCE_LANGUAGE
 
-source_file = "../text/en/mig-29.txt"
+source_file = "../text/en/The_wonderful_wizard_of_Oz.txt"
 with open(source_file, "r", encoding="utf-8") as file:
     source_text = file.read()
 
