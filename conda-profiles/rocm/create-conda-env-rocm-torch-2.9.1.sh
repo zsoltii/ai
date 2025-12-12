@@ -21,14 +21,15 @@ echo "Installing additional dependencies..."
 conda run -n rocm pip install sentencepiece transformers hf_xet accelerate diffusers protobuf xformers sacremoses peft scipy backoff
 
 echo "Installing bitsandbytes rocm version"
-# sudo apt-get install -y build-essential cmake
+# sudo amdgpu-install # you need rocm 6.4.x version
+# sudo apt-get install -y build-essential cmake rocm-dev rocm-libs
 rm -rf bitsandbytes
-git clone -b multi-backend-refactor https://github.com/bitsandbytes-foundation/bitsandbytes.git && cd bitsandbytes/
+git clone https://github.com/bitsandbytes-foundation/bitsandbytes.git && cd bitsandbytes/
 cmake -DCOMPUTE_BACKEND=hip -S .
 make
-conda run -n rocm pip install -e .
+conda run -n rocm pip install .
+cd ..
 rm -rf bitsandbytes
-
 
 # clear huggingface model cache
 #rm -rf ~/.cache/huggingface/hub/

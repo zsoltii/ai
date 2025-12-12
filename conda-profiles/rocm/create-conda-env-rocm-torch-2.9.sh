@@ -27,6 +27,7 @@ git clone -b multi-backend-refactor https://github.com/bitsandbytes-foundation/b
 cmake -DCOMPUTE_BACKEND=hip -S .
 make
 conda run -n rocm pip install -e .
+cd ..
 rm -rf bitsandbytes
 
 

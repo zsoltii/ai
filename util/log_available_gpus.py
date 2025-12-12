@@ -16,6 +16,7 @@ def _format_bytes(bytes_val: int) -> str:
 
 
 def log_available_gpus():
+    print("start log available gpus")
     """Log available GPU information including total memory per device.
 
     Safe if PyTorch is not installed or CUDA is not available.
