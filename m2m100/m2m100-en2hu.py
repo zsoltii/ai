@@ -139,7 +139,8 @@ with open(output_file, "a", encoding="utf-8") as out_f:
 
             with torch.no_grad():
                 generated_tokens = model.generate(**encoded_hi,
-                                                  forced_bos_token_id=tokenizer.get_lang_id(TARGET_LANGUAGE))
+                                                  forced_bos_token_id=tokenizer.get_lang_id(TARGET_LANGUAGE),
+                                                  max_length=512)
                 num_generated_tokens = generated_tokens.shape[1]
                 print(f"Number of generated tokens: {num_generated_tokens}")
                 max_generated_tokens = max(max_generated_tokens, num_generated_tokens)
