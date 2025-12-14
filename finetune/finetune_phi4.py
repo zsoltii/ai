@@ -22,11 +22,21 @@ log_available_gpus()
 
 # --- Modell és Tokenizer beállítások ---
 # MODEL_ID = "microsoft/Phi-4-reasoning-plus"
-MODEL_ID = "microsoft/Phi-4-mini-reasoning"
-# A lokális adathalmazt tartalmazó főkönyvtár
-dataset_path = "../wikiextractor/hu/huwiki_extracted/"
+BASE_MODEL_ID = "microsoft/Phi-4-mini-reasoning"
 # A finomhangolt modell mentési neve (LoRA adapter)
-new_model_name = "phi4-huwiki-finetuned"
+NEW_MODEL_NAME = BASE_MODEL_ID.replace("/", "-") + "-finetuned"
+# A finomhangolt LoRA adapter könyvtára
+ADAPTER_MODEL_PATH = "./" + NEW_MODEL_NAME
+# A lokális adathalmazt tartalmazó főkönyvtár
+dataset_path = "../wikiextractor/hu/huwiki_extracted/AA"
+
+# --- Memória és Offload beállítások ---
+max_memory = {
+    0: "14Gib", # Memória korlát a 0-s GPU-ra
+    "cpu": "85Gib" # Memória korlát a CPU-ra (offload esetén)
+}
+os.makedirs("./offload", exist_ok=True)
+print("max_memory konfiguráció használata:", max_memory)
 
 # --- Kvantálási Konfiguráció (memóriahatékonyságért) ---
 quantization_config = BitsAndBytesConfig(
@@ -37,18 +47,22 @@ quantization_config = BitsAndBytesConfig(
 )
 
 # --- Modell betöltése ---
-print(f"'{MODEL_ID}' modell betöltése 4-bites kvantálással...")
+print(f"'{BASE_MODEL_ID}' modell betöltése 4-bites kvantálással...")
 model = AutoModelForCausalLM.from_pretrained(
-    MODEL_ID,
+    BASE_MODEL_ID,
     quantization_config=quantization_config,
     device_map="auto",
+    max_memory=max_memory,
+    dtype=torch.half,
+    low_cpu_mem_usage=False,
+    offload_folder="./offload",
     trust_remote_code=True,
 )
 model.config.use_cache = False
 model.config.pretraining_tp = 1
 
 # --- Tokenizer betöltése ---
-tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID, trust_remote_code=True)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 
@@ -67,8 +81,10 @@ peft_config = LoraConfig(
     ]
 )
 
+# A modellt mindig előkészítjük a PEFT-re. A Trainer fogja eldönteni, hogy betölt-e egy checkpointot.
 model = get_peft_model(model, peft_config)
 print("A modell felkészítve a PEFT (LoRA) tanításra.")
+
 
 # --- Dokumentumok számának meghatározása ---
 def count_documents(directory):
@@ -77,32 +93,38 @@ def count_documents(directory):
     Minden fájlt egyetlen JSON objektumként kezel.
     """
     count = 0
+    skip_count = 0
     for root, _, files in os.walk(directory):
         files.sort()
-        print(f"Processing root: {root}")
-        print(f"Processing files: {files}")
-        print(f"Processing files count: {files.__len__()}")
+        print(f"Feldolgozandó könyvtár: {root}")
+        # print(f"Feldolgozandó fájlok: {files}")
+        print(f"Fájlok száma: {files.__len__()}")
         for filename in files:
             if filename.startswith("wiki_"):
                 filepath = os.path.join(root, filename)
-                print(f"Counting file: {filepath}")
+                # print(f"Fájl számolása: {filepath}")
                 try:
                     with open(filepath, 'r', encoding='utf-8') as f:
                         file_content = f.read() # Fájl tartalmának egyben beolvasása
                         data = json.loads(file_content) # JSON objektumként értelmezés
                         if 'text' in data and data['text']:
                             count += 1
-                            print(f"Added for counting file: {filepath}")
+                            # print(f"Fájl hozzáadva a számoláshoz: {filepath}")
                         else:
-                            print(f"No text: {filepath}")
+                            # print(f"Nincs szöveg: {filepath}")
+                            skip_count += 1
                 except json.JSONDecodeError:
-                    print(f"Warning: Skipping invalid JSON file {filepath} (JSONDecodeError)")
+                    print(f"Figyelmeztetés: Érvénytelen JSON fájl kihagyva {filepath} (JSONDecodeError)")
+                    skip_count += 1
                 except (KeyError, TypeError):
-                    print(f"Warning: Skipping file {filepath} (missing 'text' field or TypeError)")
+                    print(f"Figyelmeztetés: Fájl kihagyva {filepath} (hiányzó 'text' mező vagy TypeError)")
+                    skip_count += 1
                 except Exception as e:
-                    print(f"Error counting file {filepath}: {e}")
+                    print(f"Hiba a fájl számolása közben {filepath}: {e}")
+                    skip_count += 1
             else:
-                print(f"Skipping non-wiki file: {filename}")
+                print(f"Nem-wiki fájl kihagyva: {filename}")
+    print(f"Kihagyott fájlok száma: {skip_count}")
     return count
 
 print("Dokumentumok számának meghatározása...")
@@ -135,12 +157,8 @@ def stream_data_from_local_files(directory):
                                 f"{data['text']}"
                             )
                             yield {"text": structured_text}
-                except json.JSONDecodeError:
-                    print(f"Warning: Skipping invalid JSON file {filepath} (JSONDecodeError)")
-                except (KeyError, TypeError):
-                    print(f"Warning: Skipping file {filepath} (missing 'text' field or TypeError)")
                 except Exception as e:
-                    print(f"Error streaming file {filepath}: {e}")
+                    print(f"Hiba a fájl streamelése közben {filepath}: {e}")
 
 dataset = IterableDataset.from_generator(stream_data_from_local_files, gen_kwargs={"directory": dataset_path})
 print("Streaming adathalmaz beállítva.")
@@ -149,7 +167,7 @@ print("Streaming adathalmaz beállítva.")
 per_device_train_batch_size = 1
 gradient_accumulation_steps = 4
 # num_epochs = 10 # ez az ideális, kb 90%-os pontosság érhető el vele, viszont 13-14 nap a magyar wikipediát feldolgozni egy AMD 6900 XT-vel
-num_epochs = 2
+num_epochs = 6
 effective_batch_size = per_device_train_batch_size * gradient_accumulation_steps
 steps_per_epoch = math.ceil(num_documents / effective_batch_size)
 max_steps = steps_per_epoch * num_epochs
@@ -193,10 +211,12 @@ trainer = SFTTrainer(
 
 # --- Tanítás indítása ---
 print("A finomhangolás elindítása...")
-trainer.train()
+# A resume_from_checkpoint=True argumentum biztosítja, hogy a Trainer
+# automatikusan betöltse a legutóbbi checkpointot, ha létezik.
+trainer.train(resume_from_checkpoint=True)
 print("A finomhangolás befejeződött.")
 
 # --- Modell mentése ---
-print(f"A finomhangolt modell (adapter) mentése a '{new_model_name}' könyvtárba...")
-trainer.model.save_pretrained(new_model_name)
+print(f"A finomhangolt modell (adapter) mentése a '{NEW_MODEL_NAME}' könyvtárba...")
+trainer.model.save_pretrained(NEW_MODEL_NAME)
 print("Modell mentve.")
