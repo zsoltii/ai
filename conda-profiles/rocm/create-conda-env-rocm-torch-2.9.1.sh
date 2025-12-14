@@ -18,7 +18,7 @@ echo "Installing PyTorch ${TORCH_VERSION} support..."
 conda run -n rocm pip install torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} torchaudio==${TORCH_VERSION} pytorch_triton==${PYTORCH_TRITION_VERSION} --extra-index-url https://download.pytorch.org/whl/
 echo "Installing additional dependencies..."
 
-conda run -n rocm pip install sentencepiece transformers hf_xet accelerate diffusers protobuf xformers sacremoses peft scipy backoff
+conda run -n rocm pip install sentencepiece transformers hf_xet accelerate diffusers protobuf xformers sacremoses peft scipy backoff peft datasets trl
 
 echo "Installing bitsandbytes rocm version"
 # sudo amdgpu-install # you need rocm 6.4.x version

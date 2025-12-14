@@ -173,3 +173,4 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 /wikiextractor/hu/huwiki_extracted/
+/wikiextractor/hu/huwiki-latest-pages-articles.xml.bz2

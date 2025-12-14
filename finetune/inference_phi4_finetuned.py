@@ -1,0 +1,89 @@
+import os
+import sys
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, AutoConfig
+from peft import PeftModel
+
+# --- Környezet beállítása ---
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from util.log_available_gpus import log_available_gpus
+
+log_available_gpus()
+
+# --- Konfiguráció ---
+# Az alapmodell, amire a finomhangolást végeztük
+BASE_MODEL_ID = "microsoft/Phi-4-mini-reasoning"
+# A finomhangolt LoRA adapter könyvtára
+ADAPTER_MODEL_PATH = "./phi4-huwiki-finetuned"
+
+# --- Memória és Offload beállítások ---
+max_memory = {
+    0: "14Gib", # Memória korlát a 0-s GPU-ra
+    "cpu": "85Gib" # Memória korlát a CPU-ra (offload esetén)
+}
+os.makedirs("./offload", exist_ok=True)
+print("Using max_memory config:", max_memory)
+
+# --- Kvantálási Konfiguráció (részletes) ---
+# A modell eredeti kvantálási sémájának felülbírálása a konzisztencia érdekében
+config = AutoConfig.from_pretrained(BASE_MODEL_ID)
+if hasattr(config, "quantization_config"):
+    print(f"Original quantization_config {config.quantization_config}")
+    del config.quantization_config
+    print("Original quantization_config deleted!")
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.half,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_storage=torch.uint8,
+    llm_int8_enable_fp32_cpu_offload=True,  # Engedélyezi a CPU-ra történő offload-ot
+)
+
+# --- 1. Lépés: Alapmodell betöltése (részletes paraméterekkel) ---
+print(f"Alapmodell betöltése: '{BASE_MODEL_ID}'")
+base_model = AutoModelForCausalLM.from_pretrained(
+    BASE_MODEL_ID,
+    config=config,
+    quantization_config=quantization_config,
+    device_map="auto",
+    max_memory=max_memory,
+    dtype=torch.half,
+    low_cpu_mem_usage=False,
+    offload_folder="./offload",
+    trust_remote_code=True,
+)
+
+tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID)
+tokenizer.pad_token = tokenizer.eos_token
+
+# --- 2. Lépés: Adapter betöltése és a modellek egyesítése ---
+print(f"\nAdapter betöltése a '{ADAPTER_MODEL_PATH}' könyvtárból...")
+# A PeftModel osztály "ráhúzza" a LoRA adaptert az alapmodellre
+model = PeftModel.from_pretrained(base_model, ADAPTER_MODEL_PATH)
+print("Adapter sikeresen hozzáadva az alapmodellhez.")
+
+print("\nModell betöltve. A modell elhelyezkedése:")
+print(model.hf_device_map)
+
+# --- 3. Lépés: Inferencia a finomhangolt modellel ---
+messages = [
+    {"role": "system", "content": "Te egy segítőkész AI asszisztens vagy. Mindig magyarul válaszolj!"},
+    {"role": "user", "content": "Ki volt a legelső főispánja Heves és Külső-Szolnok vármegyének és mettől meddig töltötte be ezt a tisztséget?"}
+]
+
+input_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+print("\nGenerálás folyamatban a finomhangolt modellel...")
+
+with torch.no_grad():
+    output = model.generate(**inputs, max_new_tokens=1024, do_sample=True, temperature=0.7, top_p=0.95, pad_token_id=tokenizer.eos_token_id)
+
+print("Dekódolás folyamatban...")
+
+response = tokenizer.decode(output[0], skip_special_tokens=True)
+
+print("\n--- AI VÁLASZ ---")
+print(response)
