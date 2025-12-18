@@ -3,88 +3,67 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import math
-import json
-import torch
+import math, json, torch
 from datasets import IterableDataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitsAndBytesConfig,
 )
-from peft import LoraConfig, get_peft_model
+from peft import get_peft_model, PeftModel
 from trl import SFTTrainer, SFTConfig
+
 from util.log_available_gpus import log_available_gpus
 from util.hfh_login import hfh_login
+from util.finetune import should_resume_from_checkpoint, create_new_model_name, get_last_checkpoint, QUANTIZATION_CONFIG, RESULTS_DIRECTORY, PEFT_CONFIG
 
 hfh_login()
 log_available_gpus()
 
 # --- Modell és Tokenizer beállítások ---
-# MODEL_ID = "microsoft/Phi-4-reasoning-plus"
 BASE_MODEL_ID = "microsoft/Phi-4-mini-reasoning"
 # A finomhangolt modell mentési neve (LoRA adapter)
-NEW_MODEL_NAME = BASE_MODEL_ID.replace("/", "-") + "-finetuned"
+NEW_MODEL_NAME = create_new_model_name(BASE_MODEL_ID, "finetuned")
 # A finomhangolt LoRA adapter könyvtára
 ADAPTER_MODEL_PATH = "./" + NEW_MODEL_NAME
 # A lokális adathalmazt tartalmazó főkönyvtár
-dataset_path = "../wikiextractor/hu/huwiki_extracted/AA"
+DATASET_PATH = "../wikiextractor/hu/huwiki_extracted/"
+# DATASET_PATH = "../wikiextractor/hu/teszt"
+
+PER_DEVICE_TRAIN_BATCH_SIZE = 1
+GRADIENT_ACCUMULATION_STEPS = 4
+# NUM_EPOCHS = 10 # ez az ideális, kb 90%-os pontosság érhető el vele, viszont 13-14 nap a magyar wikipediát feldolgozni egy AMD 6900 XT-vel
+NUM_EPOCHS = 4
 
 # --- Memória és Offload beállítások ---
-max_memory = {
+MAX_MEMORY = {
     0: "14Gib", # Memória korlát a 0-s GPU-ra
     "cpu": "85Gib" # Memória korlát a CPU-ra (offload esetén)
 }
 os.makedirs("./offload", exist_ok=True)
-print("max_memory konfiguráció használata:", max_memory)
+print("max_memory konfiguráció használata:", MAX_MEMORY)
 
-# --- Kvantálási Konfiguráció (memóriahatékonyságért) ---
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True,
-)
+
 
 # --- Modell betöltése ---
 print(f"'{BASE_MODEL_ID}' modell betöltése 4-bites kvantálással...")
-model = AutoModelForCausalLM.from_pretrained(
+base_model = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL_ID,
-    quantization_config=quantization_config,
+    quantization_config=QUANTIZATION_CONFIG,
     device_map="auto",
-    max_memory=max_memory,
+    max_memory=MAX_MEMORY,
     dtype=torch.half,
     low_cpu_mem_usage=False,
     offload_folder="./offload",
     trust_remote_code=True,
 )
-model.config.use_cache = False
-model.config.pretraining_tp = 1
+base_model.config.use_cache = False
+base_model.config.pretraining_tp = 1
 
-# --- Tokenizer betöltése ---
+# --- Alapértelmezett Tokenizer betöltése ---
+print("Alapértelmezett Tokenizer betöltése")
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID, trust_remote_code=True)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
-
-# --- PEFT (LoRA) Konfiguráció ---
-peft_config = LoraConfig(
-    lora_alpha=16,
-    lora_dropout=0.1,
-    r=64,
-    bias="none",
-    task_type="CAUSAL_LM",
-    target_modules=[
-        "qkv_proj",
-        "o_proj",
-        "gate_up_proj",
-        "down_proj"
-    ]
-)
-
-# A modellt mindig előkészítjük a PEFT-re. A Trainer fogja eldönteni, hogy betölt-e egy checkpointot.
-model = get_peft_model(model, peft_config)
-print("A modell felkészítve a PEFT (LoRA) tanításra.")
-
 
 # --- Dokumentumok számának meghatározása ---
 def count_documents(directory):
@@ -127,12 +106,6 @@ def count_documents(directory):
     print(f"Kihagyott fájlok száma: {skip_count}")
     return count
 
-print("Dokumentumok számának meghatározása...")
-num_documents = count_documents(dataset_path)
-if num_documents == 0:
-    raise ValueError("Nem található feldolgozható adat a megadott könyvtárban.")
-print(f"Talált dokumentumok száma: {num_documents}")
-
 # --- Adatfolyam (Streaming) beállítása ---
 def stream_data_from_local_files(directory):
     """
@@ -160,30 +133,63 @@ def stream_data_from_local_files(directory):
                 except Exception as e:
                     print(f"Hiba a fájl streamelése közben {filepath}: {e}")
 
-dataset = IterableDataset.from_generator(stream_data_from_local_files, gen_kwargs={"directory": dataset_path})
+
+# --- Teljes adathalmaz finomhangolása ---
+output_dir = RESULTS_DIRECTORY + "-" + NEW_MODEL_NAME
+print(f"--- Teljes adathalmaz feldolgozása: {DATASET_PATH} ---")
+print(f"--- Eredmények mentése ide: {output_dir} ---")
+
+model = base_model
+
+adapter_path = os.path.join(ADAPTER_MODEL_PATH, "adapter_model.safetensors")
+is_adapter_saved = os.path.exists(adapter_path)
+last_checkpoint = get_last_checkpoint(output_dir)
+
+if last_checkpoint:
+    checkpoint_path = os.path.join(output_dir, last_checkpoint)
+    print(f"Meglévő adapter és toknaizer betöltése a '{checkpoint_path}' könyvtárból a tanítás folytatásához...")
+    model = PeftModel.from_pretrained(base_model, checkpoint_path)
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint_path, trust_remote_code=True)
+    print("Adapter sikeresen betöltve.")
+elif is_adapter_saved:
+    print(f"Meglévő adapter és tokanizer betöltése a '{ADAPTER_MODEL_PATH}' könyvtárból a tanítás folytatásához...")
+    model = PeftModel.from_pretrained(base_model, ADAPTER_MODEL_PATH)
+    tokenizer = AutoTokenizer.from_pretrained(ADAPTER_MODEL_PATH, trust_remote_code=True)
+    print("Adapter sikeresen betöltve.")
+else:
+    print("Nem található meglévő adapter. Új adapter létrehozása...")
+    model = get_peft_model(base_model, PEFT_CONFIG)
+    print("Új adapter sikeresen létrehozva.")
+    print("A modell felkészítve a PEFT (LoRA) tanításra.")
+
+print("\nModell betöltve. A modell elhelyezkedése:")
+print(model.hf_device_map)
+
+print("Dokumentumok számának meghatározása...")
+num_documents = count_documents(DATASET_PATH)
+if num_documents == 0:
+    raise ValueError("Nem található feldolgozható adat a megadott könyvtárban.")
+print(f"Talált dokumentumok száma: {num_documents}")
+
+dataset = IterableDataset.from_generator(stream_data_from_local_files, gen_kwargs={"directory": DATASET_PATH})
 print("Streaming adathalmaz beállítva.")
 
 # --- Tanítási Argumentumok (Dinamikus lépésszámmal) ---
-per_device_train_batch_size = 1
-gradient_accumulation_steps = 4
-# num_epochs = 10 # ez az ideális, kb 90%-os pontosság érhető el vele, viszont 13-14 nap a magyar wikipediát feldolgozni egy AMD 6900 XT-vel
-num_epochs = 6
-effective_batch_size = per_device_train_batch_size * gradient_accumulation_steps
+effective_batch_size = PER_DEVICE_TRAIN_BATCH_SIZE * GRADIENT_ACCUMULATION_STEPS
 steps_per_epoch = math.ceil(num_documents / effective_batch_size)
-max_steps = steps_per_epoch * num_epochs
+max_steps = steps_per_epoch * NUM_EPOCHS
 
 # A mentési gyakoriság beállítása a kérésnek megfelelően
-save_steps = min(steps_per_epoch // 2, 100)
+save_steps = max(1, min(steps_per_epoch // 2, 6))
 
-print(f"Dinamikusan számított max_steps: {max_steps} ({num_epochs} epoch-hoz)")
+print(f"Dinamikusan számított max_steps: {max_steps} ({NUM_EPOCHS} epoch-hoz)")
 print(f"Mentési gyakoriság (save_steps): {save_steps}")
 
-
 training_arguments = SFTConfig(
-    output_dir="./results",
+    output_dir=output_dir,
     max_steps=max_steps,
-    per_device_train_batch_size=per_device_train_batch_size,
-    gradient_accumulation_steps=gradient_accumulation_steps,
+    per_device_train_batch_size=PER_DEVICE_TRAIN_BATCH_SIZE,
+    gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
     gradient_checkpointing=True,
     optim="paged_adamw_32bit",
     save_steps=save_steps,
@@ -198,13 +204,14 @@ training_arguments = SFTConfig(
     dataset_text_field="text",
     max_length=1024,
     seed=42,
+    save_total_limit=2,
 )
 
 # --- Tréner inicializálása ---
 trainer = SFTTrainer(
     model=model,
     train_dataset=dataset,
-    peft_config=peft_config,
+    peft_config=PEFT_CONFIG,
     processing_class=tokenizer,
     args=training_arguments,
 )
@@ -213,10 +220,52 @@ trainer = SFTTrainer(
 print("A finomhangolás elindítása...")
 # A resume_from_checkpoint=True argumentum biztosítja, hogy a Trainer
 # automatikusan betöltse a legutóbbi checkpointot, ha létezik.
-trainer.train(resume_from_checkpoint=True)
+trainer.train(resume_from_checkpoint=should_resume_from_checkpoint(output_dir))
 print("A finomhangolás befejeződött.")
 
 # --- Modell mentése ---
 print(f"A finomhangolt modell (adapter) mentése a '{NEW_MODEL_NAME}' könyvtárba...")
 trainer.model.save_pretrained(NEW_MODEL_NAME)
+# trainer.save_model(NEW_MODEL_NAME)
+tokenizer.save_pretrained(NEW_MODEL_NAME)
 print("Modell mentve.")
+
+# --- Memória felszabadítása az összefésülés előtt ---
+print("Memória felszabadítása az összefésülés előtt...")
+del model, base_model
+del trainer
+torch.cuda.empty_cache()
+print("Memória felszabadítva.")
+
+
+# --- Önállóan betölthető modell mentése ---
+print("A LoRA adapter és a bázismodell összefésülése...")
+
+# A bázismodell újratöltése kvantálással, hogy elférjen a memóriában
+merged_model_base = AutoModelForCausalLM.from_pretrained(
+    BASE_MODEL_ID,
+    quantization_config=QUANTIZATION_CONFIG,
+    device_map="auto",
+    max_memory=MAX_MEMORY,
+    dtype=torch.half,
+    low_cpu_mem_usage=False,
+    offload_folder="./offload",
+    trust_remote_code=True,
+)
+
+# A finomhangolt LoRA adapter betöltése
+# A `PeftModel` automatikusan kezeli a kvantált bázismodellt
+peft_model = PeftModel.from_pretrained(merged_model_base, NEW_MODEL_NAME)
+
+# Az adapter súlyainak összefésülése a bázismodellel
+# A `merge_and_unload` metódus a kvantált modellen is működik
+merged_model = peft_model.merge_and_unload()
+print("Az összefésülés befejeződött.")
+
+# Az összefésült modell mentése
+MERGED_MODEL_PATH = f"{NEW_MODEL_NAME}-merged"
+print(f"Az összefésült, önállóan betölthető modell mentése a '{MERGED_MODEL_PATH}' könyvtárba...")
+merged_model.save_pretrained(MERGED_MODEL_PATH)
+tokenizer.save_pretrained(MERGED_MODEL_PATH)
+
+print("Az önálló modell mentése befejeződött.")

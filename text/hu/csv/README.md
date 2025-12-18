@@ -1,0 +1,1 @@
+Download the en-pl.csv from HuggingFace dataset: https://huggingface.co/datasets/klima7/en-pl-translation/tree/main

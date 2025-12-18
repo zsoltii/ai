@@ -2,19 +2,24 @@ import os
 import sys
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, AutoConfig
-from peft import PeftModel
+from peft import LoraConfig, get_peft_model, PeftModel
 
 # --- Környezet beállítása ---
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from util.log_available_gpus import log_available_gpus
+from util.hfh_login import hfh_login
+from util.finetune import create_new_model_name, get_last_checkpoint, QUANTIZATION_CONFIG, RESULTS_DIRECTORY, PEFT_CONFIG
 
+hfh_login()
 log_available_gpus()
 
 # --- Konfiguráció ---
 # Az alapmodell, amire a finomhangolást végeztük
 BASE_MODEL_ID = "microsoft/Phi-4-mini-reasoning"
+# A finomhangolt modell mentési neve (LoRA adapter)
+NEW_MODEL_NAME = create_new_model_name(BASE_MODEL_ID, "finetuned")
 # A finomhangolt LoRA adapter könyvtára
-ADAPTER_MODEL_PATH = "./phi4-huwiki-finetuned"
+ADAPTER_MODEL_PATH = "./" + NEW_MODEL_NAME
 
 # --- Memória és Offload beállítások ---
 max_memory = {
@@ -32,21 +37,12 @@ if hasattr(config, "quantization_config"):
     del config.quantization_config
     print("Original quantization_config deleted!")
 
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.half,
-    bnb_4bit_use_double_quant=True,
-    bnb_4bit_quant_storage=torch.uint8,
-    llm_int8_enable_fp32_cpu_offload=True,  # Engedélyezi a CPU-ra történő offload-ot
-)
-
 # --- 1. Lépés: Alapmodell betöltése (részletes paraméterekkel) ---
 print(f"Alapmodell betöltése: '{BASE_MODEL_ID}'")
 base_model = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL_ID,
     config=config,
-    quantization_config=quantization_config,
+    quantization_config=QUANTIZATION_CONFIG,
     device_map="auto",
     max_memory=max_memory,
     dtype=torch.half,
@@ -59,10 +55,30 @@ tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL_ID)
 tokenizer.pad_token = tokenizer.eos_token
 
 # --- 2. Lépés: Adapter betöltése és a modellek egyesítése ---
-print(f"\nAdapter betöltése a '{ADAPTER_MODEL_PATH}' könyvtárból...")
-# A PeftModel osztály "ráhúzza" a LoRA adaptert az alapmodellre
-model = PeftModel.from_pretrained(base_model, ADAPTER_MODEL_PATH)
-print("Adapter sikeresen hozzáadva az alapmodellhez.")
+output_dir = RESULTS_DIRECTORY + "-" + NEW_MODEL_NAME
+
+model = base_model
+
+adapter_path = os.path.join(ADAPTER_MODEL_PATH, "adapter_model.safetensors")
+is_adapter_saved = os.path.exists(adapter_path)
+last_checkpoint = get_last_checkpoint(output_dir)
+
+if last_checkpoint:
+    checkpoint_path = os.path.join(output_dir, last_checkpoint)
+    print(f"Meglévő adapter és toknaizer betöltése a '{checkpoint_path}' könyvtárból a tanítás folytatásához...")
+    model = PeftModel.from_pretrained(base_model, checkpoint_path)
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint_path, trust_remote_code=True)
+    print("Adapter sikeresen betöltve.")
+elif is_adapter_saved:
+    print(f"Meglévő adapter és tokanizer betöltése a '{ADAPTER_MODEL_PATH}' könyvtárból a tanítás folytatásához...")
+    model = PeftModel.from_pretrained(base_model, ADAPTER_MODEL_PATH)
+    tokenizer = AutoTokenizer.from_pretrained(ADAPTER_MODEL_PATH, trust_remote_code=True)
+    print("Adapter sikeresen betöltve.")
+else:
+    print("Nem található meglévő adapter. Új adapter létrehozása...")
+    model = get_peft_model(base_model, PEFT_CONFIG)
+    print("Új adapter sikeresen létrehozva.")
+    print("A modell felkészítve a PEFT (LoRA) tanításra.")
 
 print("\nModell betöltve. A modell elhelyezkedése:")
 print(model.hf_device_map)

@@ -10,7 +10,8 @@ from util.log_available_gpus import log_available_gpus
 
 log_available_gpus()
 
-model_id = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
+model_id = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+#model_id = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
 
 max_memory = {
     0: "14Gib", # Reduce memory allocation for GPU 0
