@@ -18,7 +18,7 @@ device = select_device()
 hfh_login()
 
 # input token number for all models: 512
-MODEL = "Helsinki-NLP/opus-mt-en-hu"
+MODEL = "Helsinki-NLP/opus-mt-tc-big-en-hu"
 
 print("Loading tokenizer and model (this may take a while)...")
 
@@ -45,8 +45,8 @@ print("-------------------------------------------------------------------------
 print("Start translation...")
 
 INPUT_FILE = "../text/hu/csv/en-pl.csv"
-OUTPUT_FILE = "../text/hu/csv/en-hu-opus-mt.csv"
-BATCH_SIZE = 32  # --- SPEEDUP: Set batch size. Adjust based on your VRAM. ---
+OUTPUT_FILE = "../text/hu/csv/en-hu-opus-mt-tc-big.csv"
+BATCH_SIZE = 64  # --- SPEEDUP: Set batch size. Adjust based on your VRAM. ---
 
 # --- Check for existing output and determine starting point ---
 processed_lines = 0

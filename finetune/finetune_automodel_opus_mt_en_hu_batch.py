@@ -1,5 +1,9 @@
 import os
 import sys
+import re
+
+ROLE_USER = "Write me an English short story with maximum 150 words."
+ROLE_SYSTEM = "You are a creative linguistic expert. Output ONLY one grammatically correct English sentence. You must vary the sentence types across the entire English spectrum: declarative, interrogative, imperative, exclamatory, conditional (if/then), optative (wishes), or hypothetical. Use diverse structures including passive voice, compound-complex forms, and varied tenses. Do not use any internal reasoning or preamble. Output ONLY the raw text!"
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -20,43 +24,117 @@ from util.hfh_login import hfh_login
 from util.finetune import should_resume_from_checkpoint, create_new_model_name, get_last_checkpoint, \
     QUANTIZATION_CONFIG, RESULTS_DIRECTORY, PEFT_CONFIG
 
-hfh_login()
-log_available_gpus()
+# hfh_login()
+# log_available_gpus()
 
 # --- Modell és Tokenizer beállítások ---
-BASE_MODEL_ID = "microsoft/Phi-4-mini-reasoning"
+# --- Modell és Tokenizer beállítások ---
+# BASE_MODEL_ID = "meta-llama/Llama-3.1-8B"
+# BASE_MODEL_ID = "meta-llama/Llama-3.2-3B"
+# BASE_MODEL_ID = "meta-llama/Llama-3.2-1B"
+BASE_MODEL_ID = "Qwen/Qwen3-1.7B"
+# BASE_MODEL_ID = "Qwen/Qwen3-4B"
+# BASE_MODEL_ID = "Qwen/Qwen3-8B"
+# BASE_MODEL_ID = "TinyLlama/TinyLlama_v1.1"
+# BASE_MODEL_ID = "HuggingFaceTB/SmolLM3-3B"
+# BASE_MODEL_ID = "google/gemma-3-1b-it"
+# BASE_MODEL_ID = "google/gemma-3-4b-it"
+# BASE_MODEL_ID = "microsoft/Phi-4-mini-reasoning"
+# BASE_MODEL_ID = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+
+# régi, a sebesség teszt értékeke miatt kell
+
+# SENTENCE_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3" # dtype=nf4 (48/16); speed: 1.7 s/sentence
+# SENTENCE_MODEL_ID = "Qwen/Qwen3-1.7B" # dtype=bfloat16; speed (48/16): 1.49 sentence/s
+# SENTENCE_MODEL_ID = "Qwen/Qwen3-1.7B" # dtype=nf4; speed (48/16): 1.12 sentence/s
+# SENTENCE_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct" # dtype=bfloat16; speed (48/16): 2.51 sentence/s
+# SENTENCE_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct" # dtype=nf4; speed (48/16): 1.11 sentence/s
+# SENTENCE_MODEL_ID = "meta-llama/Llama-3.2-1B-Instruct" # dtype=bfloat16; speed (48/16): 2.4 sentence/s
+# SENTENCE_MODEL_ID = "meta-llama/Llama-3.2-1B-Instruct" # dtype=nf4; speed (48/16): ? 1.56 sentence/s
+# SENTENCE_MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct" # dtype=bfloat16; speed (48/16): 1 sentence/s
+# SENTENCE_MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct" # dtype=nf4; speed (48/16): 1.17 sentence/s
+# SENTENCE_MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct" # dtype=nf4; speed (48/16): 1.3 sentence/s
+# SENTENCE_MODEL_ID = "TinyLlama/TinyLlama_v1.1" # dtype=nf4; speed (48/16): 1.2 sentence/s
+# SENTENCE_MODEL_ID = "TinyLlama/TinyLlama_v1.1" # dtype=bfloat16; speed (48/16): ?
+# SENTENCE_MODEL_ID = "google/gemma-3-1b-it" # dtype=bfloat16; speed (48/16): nem megfelelő prompt miatt rossz eredmény
+# SENTENCE_MODEL_ID = "google/gemma-3-1b-it" # dtype=nf4; speed (48/16): nem megfelelő prompt miatt rossz eredmény
+
+SENTENCE_MODELS = {
+    "mistralai/Mistral-7B-Instruct-v0.3": {
+        "apply_chat_template": True,
+        "role_user": ROLE_USER,
+        "role_system": ROLE_SYSTEM,
+        "dtype": "nf4"
+    },
+    "Qwen/Qwen3-1.7B": {
+        "apply_chat_template": True,
+        "role_user": ROLE_USER,
+        "role_system": ROLE_SYSTEM,
+        "dtype": "nf4"
+    },
+    "Qwen/Qwen2.5-1.5B-Instruct": {
+        "apply_chat_template": True,
+        "role_user": ROLE_USER,
+        "role_system": ROLE_SYSTEM,
+        "dtype": "bfloat16"
+    },
+    "meta-llama/Llama-3.2-1B-Instruct": {
+        "apply_chat_template": True,
+        "role_user": ROLE_USER,
+        "role_system": ROLE_SYSTEM,
+        "dtype": "bfloat16"
+    },
+    "meta-llama/Llama-3.2-3B-Instruct": {
+        "apply_chat_template": True,
+        "role_user": ROLE_USER,
+        "role_system": ROLE_SYSTEM,
+        "dtype": "nf4"
+    },
+    "meta-llama/Llama-3.1-8B-Instruct": {
+        "apply_chat_template": True,
+        "role_user": ROLE_USER,
+        "role_system": ROLE_SYSTEM,
+        "dtype": "nf4"
+    },
+    "google/gemma-3-1b-it": {
+        "apply_chat_template": False,
+        "role_user": ROLE_USER,
+        # "role_user": ROLE_SYSTEM + "; " + ROLE_USER,
+        "role_system": "",
+        "dtype": "bfloat16"
+    },
+    "TinyLlama/TinyLlama_v1.1": {
+        "apply_chat_template": False,
+        "role_user": ROLE_USER,
+        # "role_user": ROLE_SYSTEM + "; " + ROLE_USER,
+        "role_system": "",
+        "dtype": "bfloat16"
+    }
+}
+
+SENTENCE_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
+GENERATION_BATCH_SIZE = 24
+SENTENCE_COUNT = GENERATION_BATCH_SIZE * 16
+
+PER_DEVICE_TRAIN_BATCH_SIZE = 10
+GRADIENT_ACCUMULATION_STEPS = 4
+NUM_EPOCHS = 4
+
 # A finomhangolt modell mentési neve (LoRA adapter)
 NEW_MODEL_NAME = create_new_model_name(BASE_MODEL_ID, "finetuned")
 # A finomhangolt LoRA adapter könyvtára
 ADAPTER_MODEL_PATH = "./" + NEW_MODEL_NAME
 
-# SENTENCE_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3" # dtype=nf4 (48/16); speed: 2.3s/sentence
-# SENTENCE_MODEL_ID = "Qwen/Qwen3-4B-Instruct-2507" # dtype=half; speed (48/16): 1.72 sentence/s
-SENTENCE_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct" # dtype=float32; speed (48/16): 2.2 sentence/s
-# SENTENCE_MODEL_ID = "meta-llama/Llama-3.2-1B-Instruct" # dtype=half; speed (48/16): 2.75sentence/s
-# SENTENCE_MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct" # dtype=half; speed (48/16): 1.43 sentence/s
-# SENTENCE_MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct" # dtype=nf4; speed (48/16): 1.59s/sentence
-GENERATION_BATCH_SIZE = 32
-SENTENCE_COUNT = GENERATION_BATCH_SIZE * 16
-SENTENCE_GENERATE_MESSAGES = [
-    {"role": "system", "content": "You are a creative linguistic expert. Output ONLY one grammatically correct English sentence. You must vary the sentence types across the entire English spectrum: declarative, interrogative, imperative, exclamatory, conditional (if/then), optative (wishes), or hypothetical. Use diverse structures including passive voice, compound-complex forms, and varied tenses. Do not use any internal reasoning or preamble. Output ONLY the raw text of the sentence between 3 and 100 words."},
-    {"role": "user", "content": "Generate one unique, complex, or creative English sentence with maximum 100 words. Use any sentence type (statement, question, command, exclamation, conditional, or wish). No thinking, no explain, just the sentence."}
-]
-
-PER_DEVICE_TRAIN_BATCH_SIZE = 10
-GRADIENT_ACCUMULATION_STEPS = 4
-# NUM_EPOCHS = 10 # ez az ideális, kb 90%-os pontosság érhető el vele, viszont 13-14 nap a magyar wikipediát feldolgozni egy AMD 6900 XT-vel
-NUM_EPOCHS = 10
-
 # --- Opus-MT beállítások ---
-OPUS_MODEL_ID = "Helsinki-NLP/opus-mt-en-hu"
+# OPUS_MODEL_ID = "Helsinki-NLP/opus-mt-en-hu" # ez van használva  sebesség méréshez
+OPUS_MODEL_ID = "Helsinki-NLP/opus-mt-tc-big-en-hu" # kicsit lasabb, de sokkal jobb a magyarja
 
 # --- Memória és Offload beállítások ---
 MAX_MEMORY = {
     0: "14Gib",  # Memória korlát a 0-s GPU-ra
     "cpu": "85Gib"  # Memória korlát a CPU-ra (offload esetén)
 }
-os.makedirs("./offload_m2m100", exist_ok=True)
+os.makedirs("./offload", exist_ok=True)
 print("max_memory konfiguráció használata:", MAX_MEMORY)
 
 
@@ -68,7 +146,7 @@ def generate_translation_dataset(sentence_count, batch_size):
     print(f"'{OPUS_MODEL_ID}' modell betöltése...")
     opus_model = AutoModelForSeq2SeqLM.from_pretrained(
         OPUS_MODEL_ID,
-        dtype=torch.float32,
+        dtype=torch.bfloat16,
         device_map="auto",
         max_memory=MAX_MEMORY,
         offload_folder="./offload",
@@ -90,24 +168,38 @@ def generate_translation_dataset(sentence_count, batch_size):
         del sentence_model_config.quantization_config
         print(f"Original quantization_config deleted!")
 
-    sentence_model_quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.half,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_storage=torch.uint8,
-        llm_int8_enable_fp32_cpu_offload=True,  # Engedélyezi a CPU-ra történő offload-ot
-    )
+    model_config_entry = SENTENCE_MODELS[SENTENCE_MODEL_ID]
+    model_dtype_str = model_config_entry["dtype"]
+
+    quantization_config = None
+    torch_dtype = torch.bfloat16
+
+    if model_dtype_str == "nf4":
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.half,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_storage=torch.uint8,
+            llm_int8_enable_fp32_cpu_offload=True,
+        )
+        torch_dtype = torch.half
+    elif model_dtype_str == "half":
+        torch_dtype = torch.float16
+    elif model_dtype_str == "float32":
+        torch_dtype = torch.float32
+    elif model_dtype_str == "bfloat16":
+        torch_dtype = torch.bfloat16
 
     sentence_model = AutoModelForCausalLM.from_pretrained(
         SENTENCE_MODEL_ID,
-        # config=sentence_model_config,
-        # quantization_config=sentence_model_quantization_config,
+        quantization_config=quantization_config,
         device_map="auto",
         max_memory=MAX_MEMORY,
-        dtype=torch.half,
+        dtype=torch_dtype,
         low_cpu_mem_usage=False,
-        offload_folder="./offload_sentence",
+        offload_folder="./offload",
+        trust_remote_code=True,
     )
     sentence_model = torch.compile(sentence_model)
     sentence_tokenizer = AutoTokenizer.from_pretrained(SENTENCE_MODEL_ID)
@@ -127,12 +219,21 @@ def generate_translation_dataset(sentence_count, batch_size):
             if current_batch_size <= 0:
                 break
 
-            pbar.set_description(f"Batch {i + 1}/{num_batches}: Angol mondatok generálása")
-            batch_input_texts = [
-                sentence_tokenizer.apply_chat_template(SENTENCE_GENERATE_MESSAGES, tokenize=False,
-                                                       add_generation_prompt=True)
-                for _ in range(current_batch_size)
-            ]
+            pbar.set_description(f"Batch {i + 1}/{num_batches}: Angol mondatok generálása és fordítása magyarra")
+
+            if model_config_entry["apply_chat_template"]:
+                messages = []
+                if model_config_entry["role_system"]:
+                    messages.append({"role": "system", "content": model_config_entry["role_system"]})
+                messages.append({"role": "user", "content": model_config_entry["role_user"]})
+
+                batch_input_texts = [
+                    sentence_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                    for _ in range(current_batch_size)
+                ]
+            else:
+                batch_input_texts = [model_config_entry["role_user"]] * current_batch_size
+
             en_sentence_inputs = sentence_tokenizer(batch_input_texts, return_tensors="pt", padding=True).to(
                 sentence_model.device)
 
@@ -154,7 +255,7 @@ def generate_translation_dataset(sentence_count, batch_size):
 
             en_sentences = []
             for sentence in decoded_sentences:
-                clean_sentence = sentence.strip()
+                clean_sentence = re.sub(r'<think>.*?</think>', '', sentence, flags=re.DOTALL).strip()
                 if "(" in clean_sentence:
                     clean_sentence = clean_sentence.partition("(")[0].strip()
                 en_sentences.append(clean_sentence)
@@ -172,13 +273,16 @@ def generate_translation_dataset(sentence_count, batch_size):
             for en_sentence, hu_sentence in zip(en_sentences, hu_sentences):
                 structured_text = (
                     "instruction: Translate the following English sentence to Hungarian\n"
-                    f"input: {en_sentence}\n"
-                    f"output: {hu_sentence}"
+                    f"input-english: {en_sentence}\n"
+                    f"output-hungarian: {hu_sentence}"
                 )
+                print("--------------------")
+                print(f" - English sentence: {en_sentence}")
+                print(f" - Hungarian sentence: {hu_sentence}")
                 data.append({"text": structured_text})
             pbar.update(current_batch_size)
 
-    del opus_model, opus_tokenizer, sentence_model, sentence_tokenizer, sentence_model_config, sentence_model_quantization_config
+    del opus_model, opus_tokenizer, sentence_model, sentence_tokenizer, sentence_model_config
     torch.cuda.empty_cache()
 
     return data
@@ -194,6 +298,7 @@ num_documents = dataset.num_rows
 if num_documents == 0:
     raise ValueError("Nem található feldolgozható adat a megadott könyvtárban.")
 print(f"Talált dokumentumok száma: {num_documents}")
+
 
 # --- Modell betöltése ---
 print(f"'{BASE_MODEL_ID}' modell betöltése 4-bites kvantálással...")
@@ -253,7 +358,7 @@ steps_per_epoch = math.ceil(num_documents / effective_batch_size)
 max_steps = steps_per_epoch * NUM_EPOCHS
 
 # A mentési gyakoriság beállítása a kérésnek megfelelően
-# save_steps = max(1, min(steps_per_epoch // 2, 6))
+# save_steps = max(1, min(steps_per_epoch // 2, 100))
 save_steps = 6
 
 print(f"Dinamikusan számított max_steps: {max_steps} ({NUM_EPOCHS} epoch-hoz)")
@@ -261,24 +366,33 @@ print(f"Mentési gyakoriság (save_steps): {save_steps}")
 
 training_arguments = SFTConfig(
     output_dir=output_dir,
+    # 10k mondatnál érdemesebb epoch-alapú tanítást nézni, vagy több ezer lépést
     max_steps=max_steps,
     per_device_train_batch_size=PER_DEVICE_TRAIN_BATCH_SIZE,
     gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
     gradient_checkpointing=True,
     optim="paged_adamw_32bit",
     save_steps=save_steps,
-    logging_steps=save_steps,
-    learning_rate=2e-4,
-    weight_decay=0.001,
-    fp16=False,
+    logging_steps=2, # Sűrűbb logolás, hogy lásd a loss csökkenését
+
+    # --- KRITIKUS MÓDOSÍTÁSOK ---
+    learning_rate=5e-5,        # A 2e-4 LoRA-hoz néha sok, a 5e-5 stabilabb fordításhoz
+    lr_scheduler_type="cosine", # A "constant" helyett a "cosine" segít a finomhangolás végén
+    warmup_ratio=0.1,          # Magasabb warmup (10%), hogy ne rántsa el a súlyokat az elején
+    weight_decay=0.01,         # Erősebb regularizáció a túltanulás ellen
+    # ----------------------------
+
     bf16=True,
-    max_grad_norm=0.3,
-    warmup_ratio=0.03,
-    lr_scheduler_type="constant",
+    max_grad_norm=1.0,         # 0.3-ról 1.0-ra emelve stabilabb lehet
     dataset_text_field="text",
-    max_length=1024,
+    max_length=256,        # Fordításnál ritka a 1024 tokenes mondat. A 256 gyorsabb és kevesebb memóriát eszik.
+    packing=False,             # Mondatonkénti tanításnál a packing=False javasolt, hogy tiszta határok legyenek
     seed=42,
     save_total_limit=2,
+    dataset_kwargs={
+        "add_special_tokens": True, # Fontos a mondatzáró (EOS) tokenek miatt
+        "append_concat_token": False,
+    }
 )
 
 # --- Tréner inicializálása ---

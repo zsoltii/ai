@@ -1,7 +1,8 @@
 import os
 import sys
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, AutoConfig
+from threading import Thread
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, AutoConfig, TextIteratorStreamer
 from peft import LoraConfig, get_peft_model, PeftModel
 
 # --- Környezet beállítása ---
@@ -15,7 +16,7 @@ log_available_gpus()
 
 # --- Konfiguráció ---
 # Az alapmodell, amire a finomhangolást végeztük
-BASE_MODEL_ID = "microsoft/Phi-4-mini-reasoning"
+BASE_MODEL_ID = "Qwen/Qwen3-1.7B"
 # A finomhangolt modell mentési neve (LoRA adapter)
 NEW_MODEL_NAME = create_new_model_name(BASE_MODEL_ID, "finetuned")
 # A finomhangolt LoRA adapter könyvtára
@@ -83,10 +84,9 @@ else:
 print("\nModell betöltve. A modell elhelyezkedése:")
 print(model.hf_device_map)
 
-# --- 3. Lépés: Inferencia a finomhangolt modellel ---
 messages = [
     {"role": "system", "content": "Te egy segítőkész AI asszisztens vagy. Mindig magyarul válaszolj!"},
-    {"role": "user", "content": "Ki volt a legelső főispánja Heves és Külső-Szolnok vármegyének és mettől meddig töltötte be ezt a tisztséget?"}
+    {"role": "user", "content": "Írj egy kedves gyerekeknek szóló nagyon rövid történetet!"}
 ]
 
 input_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
@@ -94,12 +94,13 @@ inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 print("\nGenerálás folyamatban a finomhangolt modellel...")
 
-with torch.no_grad():
-    output = model.generate(**inputs, max_new_tokens=1024, do_sample=True, temperature=0.7, top_p=0.95, pad_token_id=tokenizer.eos_token_id)
+streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
+generation_kwargs = dict(**inputs, streamer=streamer, max_new_tokens=1024*4, do_sample=True)
 
-print("Dekódolás folyamatban...")
-
-response = tokenizer.decode(output[0], skip_special_tokens=True)
+thread = Thread(target=model.generate, kwargs=generation_kwargs)
+thread.start()
 
 print("\n--- AI VÁLASZ ---")
-print(response)
+for new_text in streamer:
+    print(new_text, end="", flush=True)
+print()
