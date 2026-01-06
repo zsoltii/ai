@@ -17,7 +17,12 @@ else:
 model_name = 'Helsinki-NLP/opus-mt-en-hu'
 print("load model...")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
+model = AutoModelForSeq2SeqLM.from_pretrained(
+    model_name,
+    dtype=torch.bfloat16,
+    low_cpu_mem_usage=True,
+    attn_implementation="sdpa",
+).to(device)
 print(f"Model loaded: {model_name}")
 print("-----------------------------------------------------")
 
@@ -61,11 +66,16 @@ with open(output_file, "a", encoding="utf-8") as out_f:
         translated_sentences = []
         for sentence in sentences:
             # A szöveg tokenizálása
-            input_ids = tokenizer.encode(sentence, return_tensors="pt").to(device)
+            input_ids = tokenizer.encode(sentence, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
 
             # A fordítás végrehajtása
-            with torch.no_grad():
-                outputs = model.generate(input_ids, max_length=512, num_beams=4, early_stopping=True)
+            with torch.inference_mode():
+                outputs = model.generate(**input_ids,
+                                         max_new_tokens=256,
+                                         num_beams=1,  # Gyorsabb, mint a beam search
+                                         do_sample=False,
+                                         use_cache=True,
+                                         )
                 translation = tokenizer.decode(outputs[0], skip_special_tokens=True)
                 translated_sentences.append(translation)
 

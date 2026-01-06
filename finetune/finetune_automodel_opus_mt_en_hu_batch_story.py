@@ -3,7 +3,7 @@ import sys
 import re
 import shutil
 
-ROLE_USER = "Write me a random English short story"
+ROLE_USER = "Write me a random English short story. The sentences long must be maximum 60 words!"
 ROLE_SYSTEM = ""
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -97,8 +97,8 @@ STORY_GENERATOR_MODELS = {
 }
 
 STORY_GENERATOR_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
-GENERATION_BATCH_SIZE = 64
-STORY_COUNT = GENERATION_BATCH_SIZE * 5
+GENERATION_BATCH_SIZE = 2
+STORY_COUNT = GENERATION_BATCH_SIZE * 2
 
 PER_DEVICE_TRAIN_BATCH_SIZE = 10
 GRADIENT_ACCUMULATION_STEPS = 4
@@ -133,14 +133,12 @@ def generate_translation_dataset(story_count, batch_size):
         OPUS_MODEL_ID,
         dtype=torch.bfloat16,
         device_map="auto",
-        max_memory=MAX_MEMORY,
-        offload_folder="./offload",
-        low_cpu_mem_usage=False,
+        low_cpu_mem_usage=True,
         attn_implementation="sdpa",
     )
     print("Compiling opus_model with torch.compile()... (first run will be slower)")
-    opus_model = torch.compile(opus_model)
-    opus_tokenizer = AutoTokenizer.from_pretrained(OPUS_MODEL_ID)
+    opus_model = torch.compile(opus_model, mode="reduce-overhead")
+    opus_tokenizer = AutoTokenizer.from_pretrained(OPUS_MODEL_ID, use_fast=True)
     print("\nOpus-MT Modell betöltve. A modell elhelyezkedése:")
     print(opus_model.hf_device_map)
 
@@ -178,16 +176,16 @@ def generate_translation_dataset(story_count, batch_size):
 
     story_generator_model = AutoModelForCausalLM.from_pretrained(
         STORY_GENERATOR_MODEL_ID,
+        dtype=torch_dtype,
         quantization_config=quantization_config,
         device_map="auto",
-        max_memory=MAX_MEMORY,
-        dtype=torch_dtype,
-        low_cpu_mem_usage=False,
-        offload_folder="./offload",
-        trust_remote_code=True,
+        attn_implementation="sdpa"
     )
-    story_generator_model = torch.compile(story_generator_model)
-    sentence_tokenizer = AutoTokenizer.from_pretrained(STORY_GENERATOR_MODEL_ID)
+    story_generator_model = torch.compile(story_generator_model, mode="reduce-overhead")
+    sentence_tokenizer = AutoTokenizer.from_pretrained(
+        STORY_GENERATOR_MODEL_ID,
+        use_fast=True,
+    )
     # A CausalLM modellekhez a padding token beállítása elengedhetetlen a batch generáláshoz
     if sentence_tokenizer.pad_token is None:
         sentence_tokenizer.pad_token = sentence_tokenizer.eos_token
@@ -219,8 +217,13 @@ def generate_translation_dataset(story_count, batch_size):
             else:
                 batch_input_texts = [model_config_entry["role_user"]] * current_batch_size
 
-            en_sentence_inputs = sentence_tokenizer(batch_input_texts, return_tensors="pt", padding=True).to(
-                story_generator_model.device)
+            en_sentence_inputs = sentence_tokenizer(
+                batch_input_texts,
+                padding="longest",
+                pad_to_multiple_of=8,
+                return_tensors="pt",
+                truncation=True,
+            ).to(story_generator_model.device)
 
             with torch.no_grad():
                 sentence_outputs = story_generator_model.generate(
@@ -244,12 +247,51 @@ def generate_translation_dataset(story_count, batch_size):
                 if "(" in clean_story:
                     clean_story = clean_story.partition("(")[0].strip()
                 
-                # Történetek szétbontása mondatokra
-                sentences = re.split(r'(?<=[.!?])\s+', clean_story)
-                for s in sentences:
-                    s = s.strip()
-                    if len(s) > 1:
-                        all_en_sentences.append(s)
+                print("--------------------")
+                print(f" - Full English story:\n{clean_story}")
+                
+                # Történetek szétbontása mondatokra (m2m100 algoritmus alapján)
+                source_text_lines = clean_story.split('\n')
+                paragraphs = []
+                current_paragraph = ""
+                for line in source_text_lines:
+                    if not line.strip():
+                        if current_paragraph:
+                            paragraphs.append(current_paragraph)
+                            current_paragraph = ""
+                    else:
+                        if current_paragraph:
+                            current_paragraph += " " + line.strip()
+                        else:
+                            current_paragraph = line.strip()
+                if current_paragraph:
+                    paragraphs.append(current_paragraph)
+
+                for para in paragraphs:
+                    if para.strip():
+                        sentences = re.split(r'(?<=[.!?])\s+', para)
+                        for s in sentences:
+                            s = s.strip()
+                            s = s.replace(" .", ".") # Fix spacing before dot
+                            
+                            # 1. Szűrő: Túl rövid mondatok (zaj)
+                            if len(s) < 5:
+                                continue
+                                
+                            # 2. Szűrő: Túl hosszú mondatok (run-on sentences)
+                            # Kb. 60 szó felett már valószínűleg rossz minőségű a generálás vagy túl komplex
+                            if len(s.split()) > 60:
+                                print(f"Skipping long sentence ({len(s.split())} words): {s[:50]}...")
+                                continue
+                                
+                            # 3. Szűrő: Érvényes mondatvégi írásjel ellenőrzése
+                            # Ha nem pontra, felkiáltójelre vagy kérdőjelre végződik (vagy idézőjelre ezek után), akkor kuka.
+                            # Ez kiszűri a félbehagyott mondatokat a generálás végén.
+                            if not re.search(r'[.!?]["\']?$', s):
+                                print(f"Skipping incomplete sentence: {s}")
+                                continue
+
+                            all_en_sentences.append(s)
 
             if not all_en_sentences:
                 generated_story_count += len(decoded_stories)
@@ -267,11 +309,22 @@ def generate_translation_dataset(story_count, batch_size):
             for j in range(0, len(all_en_sentences), translation_batch_size):
                 batch_slice = all_en_sentences[j : j + translation_batch_size]
                 
-                opus_inputs = opus_tokenizer(batch_slice, return_tensors="pt", padding=True, truncation=True).to(
-                    opus_model.device)
+                opus_inputs = opus_tokenizer(
+                    batch_slice,
+                    return_tensors="pt",
+                    padding="max_length",
+                    truncation=True,
+                    return_attention_mask=True,
+                    max_length=512,
+                ).to(opus_model.device)
 
-                with torch.no_grad():
-                    opus_outputs = opus_model.generate(**opus_inputs, max_length=512)
+                with torch.inference_mode():
+                    opus_outputs = opus_model.generate(
+                        **opus_inputs,
+                        num_beams=1,  # Gyorsabb, mint a beam search
+                        do_sample=False,
+                        use_cache=True,
+                    )
 
                 hu_batch = opus_tokenizer.batch_decode(opus_outputs, skip_special_tokens=True)
                 all_hu_sentences.extend(hu_batch)

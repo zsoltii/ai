@@ -13,7 +13,7 @@ from util.hfh_login import hfh_login
 # Set environment variable to reduce memory fragmentation
 os.environ['PYTORCH_ALLOC_CONF'] = 'expandable_segments:True'
 
-log_available_gpus()
+# log_available_gpus()
 device = select_device()
 hfh_login()
 
@@ -25,15 +25,17 @@ print("Loading tokenizer and model (this may take a while)...")
 model = AutoModelForSeq2SeqLM.from_pretrained(
     MODEL,
     dtype=torch.bfloat16,
+    low_cpu_mem_usage=True,
+    attn_implementation="sdpa",
 ).to(device)
 
 # --- SPEEDUP: Use torch.compile for a significant performance boost ---
-# print("Compiling model with torch.compile()... (first run will be slower)")
-# model = torch.compile(model)
+print("Compiling model with torch.compile()... (first run will be slower)")
+model = torch.compile(model, mode="reduce-overhead")
 
 print(f"Model loaded: {getattr(model, 'name_or_path', str(model))}")
 print("prepare tokenizer...")
-tokenizer = AutoTokenizer.from_pretrained(MODEL)
+tokenizer = AutoTokenizer.from_pretrained(MODEL, use_fast=True)
 print("tokenizer prepared")
 
 if hasattr(model, "hf_device_map"):
@@ -46,7 +48,7 @@ print("Start translation...")
 
 INPUT_FILE = "../text/hu/csv/en-pl.csv"
 OUTPUT_FILE = "../text/hu/csv/en-hu-opus-mt-tc-big.csv"
-BATCH_SIZE = 64  # --- SPEEDUP: Set batch size. Adjust based on your VRAM. ---
+BATCH_SIZE = 192  # --- SPEEDUP: Set batch size. Adjust based on your VRAM. ---
 
 # --- Check for existing output and determine starting point ---
 processed_lines = 0
@@ -84,8 +86,8 @@ output_mode = 'a' if rows_to_skip > 0 else 'w'
 # Ensure the directory exists
 os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
 
-with open(INPUT_FILE, "r", encoding="utf-8", newline='') as infile, \
-        open(OUTPUT_FILE, output_mode, encoding="utf-8", newline='') as outfile:
+with (open(INPUT_FILE, "r", encoding="utf-8", newline='') as infile, \
+      open(OUTPUT_FILE, output_mode, encoding="utf-8", newline='') as outfile):
     reader = csv.reader(infile)
     writer = csv.writer(outfile)
 
@@ -118,11 +120,23 @@ with open(INPUT_FILE, "r", encoding="utf-8", newline='') as infile, \
             en_sentences = [item[0] for item in batch]
 
             # --- SPEEDUP: Tokenize batch ---
-            en_inputs = tokenizer(en_sentences, return_tensors="pt", padding=True, truncation=True, max_length=512).to(
-                model.device)
+            en_inputs = tokenizer(
+                en_sentences,
+                return_tensors="pt",
+                padding="max_length",
+                truncation=True,
+                return_attention_mask=True,
+                max_length=512,
+            ).to(model.device)
 
-            with torch.no_grad():
-                outputs = model.generate(**en_inputs, max_length=256)
+            with torch.inference_mode():
+                outputs = model.generate(
+                    **en_inputs,
+                    max_new_tokens=256,
+                    num_beams=1,  # Gyorsabb, mint a beam search
+                    do_sample=False,
+                    use_cache=True,
+                )
 
             # --- SPEEDUP: Decode batch ---
             hu_sentences = tokenizer.batch_decode(outputs, skip_special_tokens=True)

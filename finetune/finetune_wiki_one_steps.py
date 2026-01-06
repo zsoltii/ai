@@ -28,12 +28,12 @@ hfh_login()
 # BASE_MODEL_ID = "meta-llama/Llama-3.1-8B" # TPS: 28s/it; ~4400h
 # BASE_MODEL_ID = "meta-llama/Llama-3.2-3B" # TPS: 12-13s/it; ~1950h
 # BASE_MODEL_ID = "meta-llama/Llama-3.2-1B" # TPS: 5s/it; ~780h
-# BASE_MODEL_ID = "Qwen/Qwen3-1.7B" # TPS: 6-7s/it; ~1100h;
+BASE_MODEL_ID = "Qwen/Qwen3-1.7B" # TPS: 6-7s/it; ~1100h;
 # BASE_MODEL_ID = "Qwen/Qwen3-4B" # TPS: 19-20s/it; ~3000h
 # BASE_MODEL_ID = "Qwen/Qwen3-8B" # TPS: 28-29s/it; ~4600h
 # BASE_MODEL_ID = "TinyLlama/TinyLlama_v1.1" # TPS: 5-6s/it; ~850h
 # BASE_MODEL_ID = "HuggingFaceTB/SmolLM3-3B" # TPS: 12s/it; ~1900s
-BASE_MODEL_ID = "google/gemma-3-1b-it" # TPS: 2s/it; 650h
+# BASE_MODEL_ID = "google/gemma-3-1b-it" # TPS: 2s/it; 650h
 # BASE_MODEL_ID = "google/gemma-3-4b-it" # TPS: 16-17s/it; ~2600h
 # BASE_MODEL_ID = "microsoft/Phi-4-mini-reasoning" # TPS: 15-16s/it; ~2500h
 # BASE_MODEL_ID = "ibm-granite/granite-4.0-micro" # TPS: 15-16s/it; ~2500h
