@@ -18,7 +18,7 @@ echo "Installing PyTorch ${TORCH_VERSION} support..."
 conda run -n rocm pip install torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} torchaudio==${TORCH_VERSION} pytorch_triton==${PYTORCH_TRITION_VERSION} --extra-index-url https://download.pytorch.org/whl/
 
 echo "Installing additional dependencies..."
-conda run -n rocm pip install sentencepiece transformers hf_xet accelerate diffusers protobuf sacremoses peft scipy backoff peft datasets trl
+conda run -n rocm pip install sentencepiece transformers hf_xet accelerate diffusers protobuf sacremoses peft scipy backoff peft datasets trl ctranslate2
 
 echo "Installing xformers rocm version"
 export PYTORCH_ROCM_ARCH="gfx803;gfx900;gfx906;gfx908;gfx90a;gfx940;gfx941;gfx942;gfx1010;gfx1011;gfx1012;gfx1030;gfx1031;gfx1100;gfx1101;gfx1102;gfx1103"

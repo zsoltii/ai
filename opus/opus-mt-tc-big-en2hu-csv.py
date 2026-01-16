@@ -13,7 +13,7 @@ from util.hfh_login import hfh_login
 # Set environment variable to reduce memory fragmentation
 os.environ['PYTORCH_ALLOC_CONF'] = 'expandable_segments:True'
 
-# log_available_gpus()
+log_available_gpus()
 device = select_device()
 hfh_login()
 

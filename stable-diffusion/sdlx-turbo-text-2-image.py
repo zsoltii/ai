@@ -1,7 +1,8 @@
 import sys
 import os
 
-MODEL = "stabilityai/sdxl-turbo"
+# MODEL = "stabilityai/sdxl-turbo"
+MODEL = "thingthatis/sdxl-turbo"
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from diffusers import AutoPipelineForText2Image
@@ -14,7 +15,11 @@ from util.save_image import save_image
 log_available_gpus()
 device = select_device()
 
-pipe = AutoPipelineForText2Image.from_pretrained(MODEL, dtype=torch.float16, variant="fp16")
+pipe = AutoPipelineForText2Image.from_pretrained(
+    MODEL,
+    dtype=torch.bfloat16,
+    # variant="fp16"
+)
 pipe.to(device)
 
 prompt = "long hair women sitting on the beach, paint"

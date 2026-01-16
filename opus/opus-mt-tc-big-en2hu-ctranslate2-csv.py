@@ -92,7 +92,7 @@ print("Start translation...")
 
 INPUT_FILE = "../text/hu/csv/en-pl.csv"
 OUTPUT_FILE = "../text/hu/csv/en-hu-opus-mt-tc-big.csv"
-BATCH_SIZE = 128
+BATCH_SIZE = 1024
 
 # --- Check for existing output and determine starting point ---
 processed_lines = 0

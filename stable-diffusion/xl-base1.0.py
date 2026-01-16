@@ -17,9 +17,9 @@ modelName = "stabilityai/stable-diffusion-xl-base-1.0"
 if(device.type == 'cpu'):
     pipe = DiffusionPipeline.from_pretrained(modelName, use_safetensors=True)
 else:
-    pipe = DiffusionPipeline.from_pretrained(modelName, dtype=torch.float16, use_safetensors=True, variant="fp16")
-    pipe.enable_model_cpu_offload()
-    pipe.enable_sequential_cpu_offload()
+    pipe = DiffusionPipeline.from_pretrained(modelName, dtype=torch.bfloat16, use_safetensors=True, variant="fp16")
+    # pipe.enable_model_cpu_offload()
+    # pipe.enable_sequential_cpu_offload()
 pipe.to(device)
 
 prompt = "long hair women sitting on the beach, paint"

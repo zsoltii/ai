@@ -1,6 +1,8 @@
 import os
 import sys
 
+from triton.language import dtype
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from diffusers import StableDiffusionPipeline
@@ -14,9 +16,9 @@ device = select_device()
 
 model_id = "sd-legacy/stable-diffusion-v1-5"
 
-pipe = StableDiffusionPipeline.from_pretrained(model_id)
-if device.type == 'cuda':
-    pipe.enable_model_cpu_offload()
+pipe = StableDiffusionPipeline.from_pretrained(model_id, dtype=torch.bfloat16)
+# if device.type == 'cuda':
+    # pipe.enable_model_cpu_offload()
     # pipe.enable_sequential_cpu_offload()
 print(f'Pipeline loaded to device: {device.type}')
 pipe = pipe.to(device)

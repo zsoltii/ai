@@ -21,15 +21,15 @@ hfh_login()
 MODEL = "facebook/nllb-200-distilled-1.3B"
 # MODEL = "facebook/nllb-200-1.3B"
 # MODEL = "facebook/nllb-200-3.3B"
-
-max_memory = {
-    0: "14Gib",  # Reduce memory allocation for GPU 0
-    "cpu": "85Gib"
-}
+#
+# max_memory = {
+#     0: "14Gib",  # Reduce memory allocation for GPU 0
+#     "cpu": "85Gib"
+# }
 
 os.makedirs("./offload", exist_ok=True)
 
-print("Using max_memory config:", max_memory)
+# print("Using max_memory config:", max_memory)
 
 # --- Kvantálási Konfiguráció ---
 # config = AutoConfig.from_pretrained(MODEL)
@@ -54,11 +54,11 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
     MODEL,
     # config=config,
     # quantization_config=quantization_config,
-    dtype=torch.float32,
+    dtype=torch.bfloat16,
     device_map="auto",
-    max_memory=max_memory,
-    offload_folder="./offload",
-    low_cpu_mem_usage=False,
+    # max_memory=max_memory,
+    # offload_folder="./offload",
+    # low_cpu_mem_usage=False,
     attn_implementation="sdpa",
     # For further speedup on compatible hardware (newer NVIDIA GPUs), uncomment the following line
     # and install flash-attn: pip install flash-attn
@@ -88,7 +88,7 @@ tokenizer.src_lang = SOURCE_LANGUAGE
 
 INPUT_FILE = "../text/hu/csv/en-pl.csv"
 OUTPUT_FILE =  "../text/hu/csv/en-hu.csv"
-BATCH_SIZE = 128 # --- SPEEDUP: Set batch size. Adjust based on your VRAM. ---
+BATCH_SIZE = 256 # --- SPEEDUP: Set batch size. Adjust based on your VRAM. ---
 
 # Count rows in the input CSV
 with open(INPUT_FILE, "r", encoding="utf-8", newline="") as f:

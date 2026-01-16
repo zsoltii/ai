@@ -1,0 +1,18 @@
+services:
+  vega64-pytorch-rocm:
+    image: rocm/pytorch:rocm6.2.3_ubuntu22.04_py3.10_pytorch_release_2.3.0
+    volumes:
+      - .:/opt/ai
+    working_dir: /opt/ai
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+      - render
+    ipc: host
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    command: bash -c "pip install transformers==4.41.0 accelerate==0.30.1 diffusers==0.28.0 peft==0.11.1 datasets==2.19.1 trl==0.8.6 scipy==1.10.1 numba==0.56.4 sentencepiece==0.2.1 sacremoses==0.1.1 && sleep infinity"

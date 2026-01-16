@@ -10,6 +10,7 @@ from util.log_available_gpus import log_available_gpus
 from util.select_device import select_device
 
 log_available_gpus()
+
 device = select_device()
 
 model_id = "openai/gpt-oss-20b"
@@ -21,8 +22,8 @@ model_id = "openai/gpt-oss-20b"
 # }
 
 max_memory = {
-    0: "10GiB", # Reduce memory allocation for GPU 0
-    "cpu": "30Gib"
+    0: "22Gib", # Reduce memory allocation for GPU 0
+    "cpu": "16Gi"
 }
 
 # Ensure an offload folder exists so Transformers can spill to disk if needed.

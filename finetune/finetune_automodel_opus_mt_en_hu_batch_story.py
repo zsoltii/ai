@@ -2,6 +2,7 @@ import os
 import sys
 import re
 import shutil
+import time
 
 ROLE_USER = "Write me a random English short story. The sentences long must be maximum 60 words!"
 ROLE_SYSTEM = ""
@@ -19,6 +20,8 @@ from transformers import (
 )
 from peft import get_peft_model, PeftModel
 from trl import SFTTrainer, SFTConfig
+import ctranslate2
+from ctranslate2.converters import TransformersConverter
 
 from util.log_available_gpus import log_available_gpus
 from util.hfh_login import hfh_login
@@ -97,8 +100,8 @@ STORY_GENERATOR_MODELS = {
 }
 
 STORY_GENERATOR_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
-GENERATION_BATCH_SIZE = 2
-STORY_COUNT = GENERATION_BATCH_SIZE * 2
+GENERATION_BATCH_SIZE = 16
+STORY_COUNT = GENERATION_BATCH_SIZE * 16
 
 PER_DEVICE_TRAIN_BATCH_SIZE = 10
 GRADIENT_ACCUMULATION_STEPS = 4
@@ -112,11 +115,13 @@ ADAPTER_MODEL_PATH = "./" + NEW_MODEL_NAME
 # --- Opus-MT beállítások ---
 # OPUS_MODEL_ID = "Helsinki-NLP/opus-mt-en-hu" # ez van használva  sebesség méréshez
 OPUS_MODEL_ID = "Helsinki-NLP/opus-mt-tc-big-en-hu" # kicsit lasabb, de sokkal jobb a magyarja
+CT2_MODEL_PATH = "opus-mt-tc-big-en-hu-ct2"
+MAX_TOKEN_LENGTH = 450
 
 # --- Memória és Offload beállítások ---
 MAX_MEMORY = {
-    0: "14Gib",  # Memória korlát a 0-s GPU-ra
-    "cpu": "85Gib"  # Memória korlát a CPU-ra (offload esetén)
+    0: "23Gib",  # Memória korlát a 0-s GPU-ra
+    "cpu": "20Gib"  # Memória korlát a CPU-ra (offload esetén)
 }
 os.makedirs("./offload", exist_ok=True)
 print("max_memory konfiguráció használata:", MAX_MEMORY)
@@ -127,20 +132,57 @@ def generate_translation_dataset(story_count, batch_size):
     data = []
     generated_story_count = 0
 
-    # -- opus betöltése ---
-    print(f"'{OPUS_MODEL_ID}' modell betöltése...")
-    opus_model = AutoModelForSeq2SeqLM.from_pretrained(
-        OPUS_MODEL_ID,
-        dtype=torch.bfloat16,
-        device_map="auto",
-        low_cpu_mem_usage=True,
-        attn_implementation="sdpa",
-    )
-    print("Compiling opus_model with torch.compile()... (first run will be slower)")
-    opus_model = torch.compile(opus_model, mode="reduce-overhead")
+    # -- opus betöltése ctranslate2-vel ---
+    print(f"'{OPUS_MODEL_ID}' modell előkészítése CTranslate2-höz...")
+    
+    # Check if conversion is needed
+    quantization = "int8"
+    if not os.path.exists(CT2_MODEL_PATH):
+        print(f"Converting model {OPUS_MODEL_ID} to CTranslate2 format...")
+        converter = TransformersConverter(OPUS_MODEL_ID)
+        converter.convert(output_dir=CT2_MODEL_PATH, quantization=quantization, force=True)
+        print(f"Model converted to {CT2_MODEL_PATH} with quantization {quantization}.")
+    
+    # Determine device for CTranslate2
+    try:
+        cuda_count = ctranslate2.get_cuda_device_count()
+    except Exception:
+        cuda_count = 0
+    device_type = "cuda" if cuda_count > 0 else "cpu"
+    print(f"CTranslate2 detected {cuda_count} CUDA devices. Using: {device_type}")
+
+    print("Loading tokenizer...")
     opus_tokenizer = AutoTokenizer.from_pretrained(OPUS_MODEL_ID, use_fast=True)
-    print("\nOpus-MT Modell betöltve. A modell elhelyezkedése:")
-    print(opus_model.hf_device_map)
+
+    print(f"Loading CTranslate2 translator on {device_type}...")
+    try:
+        if device_type == "cpu":
+            translator = ctranslate2.Translator(
+                CT2_MODEL_PATH,
+                device=device_type,
+                compute_type=quantization,
+                intra_threads=os.cpu_count()
+            )
+        else:
+            translator = ctranslate2.Translator(
+                CT2_MODEL_PATH,
+                device=device_type
+            )
+    except RuntimeError as e:
+        if device_type == "cuda":
+            print(f"Failed to initialize CTranslate2 with CUDA: {e}")
+            print("Falling back to CPU.")
+            device_type = "cpu"
+            translator = ctranslate2.Translator(
+                CT2_MODEL_PATH,
+                device=device_type,
+                compute_type=quantization,
+                intra_threads=os.cpu_count()
+            )
+        else:
+            raise e
+            
+    print(f"Translator loaded on {device_type}.")
 
     # --- mondat generáló model betöltése ---
     print(f"'{STORY_GENERATOR_MODEL_ID}' modell betöltése...")
@@ -235,6 +277,7 @@ def generate_translation_dataset(story_count, batch_size):
                     top_k=60,
                     repetition_penalty=1.15,
                     pad_token_id=sentence_tokenizer.eos_token_id,
+                    eos_token_id=sentence_tokenizer.eos_token_id, # Ensure generation stops at EOS
                     num_return_sequences=1
                 )
 
@@ -300,36 +343,35 @@ def generate_translation_dataset(story_count, batch_size):
 
             pbar.set_description(f"Batch {i + 1}/{num_batches}: Fordítás magyarra ({len(decoded_stories)} történet)")
             
-            # Fordítás kisebb batch-ekben
-            translation_batch_size = 32
-            all_hu_sentences = []
+            # Fordítás CTranslate2-vel
+            all_hu_sentences = [""] * len(all_en_sentences)
             
-            opus_tokenizer.padding_side = "right"
-            
-            for j in range(0, len(all_en_sentences), translation_batch_size):
-                batch_slice = all_en_sentences[j : j + translation_batch_size]
+            # Tokenize
+            source_tokens_list = [opus_tokenizer.convert_ids_to_tokens(opus_tokenizer.encode(text)) for text in all_en_sentences]
+
+            valid_indices = []
+            valid_source_tokens = []
+
+            for idx, tokens in enumerate(source_tokens_list):
+                if len(tokens) <= MAX_TOKEN_LENGTH:
+                    valid_indices.append(idx)
+                    valid_source_tokens.append(tokens)
+                # else: all_hu_sentences[idx] remains ""
+
+            if valid_source_tokens:
+                # Translate
+                results = translator.translate_batch(valid_source_tokens)
+
+                # Decode
+                decoded_sentences = [opus_tokenizer.decode(opus_tokenizer.convert_tokens_to_ids(result.hypotheses[0])) for result in results]
                 
-                opus_inputs = opus_tokenizer(
-                    batch_slice,
-                    return_tensors="pt",
-                    padding="max_length",
-                    truncation=True,
-                    return_attention_mask=True,
-                    max_length=512,
-                ).to(opus_model.device)
-
-                with torch.inference_mode():
-                    opus_outputs = opus_model.generate(
-                        **opus_inputs,
-                        num_beams=1,  # Gyorsabb, mint a beam search
-                        do_sample=False,
-                        use_cache=True,
-                    )
-
-                hu_batch = opus_tokenizer.batch_decode(opus_outputs, skip_special_tokens=True)
-                all_hu_sentences.extend(hu_batch)
+                for idx, sent in zip(valid_indices, decoded_sentences):
+                    all_hu_sentences[idx] = sent
 
             for en_sentence, hu_sentence in zip(all_en_sentences, all_hu_sentences):
+                if not hu_sentence: # Skip empty translations (e.g. too long)
+                    continue
+                    
                 structured_text = (
                     "instruction: Translate the following English sentence to Hungarian\n"
                     f"input-english: {en_sentence}\n"
@@ -343,7 +385,7 @@ def generate_translation_dataset(story_count, batch_size):
             generated_story_count += len(decoded_stories)
             pbar.update(len(decoded_stories))
 
-    del opus_model, opus_tokenizer, story_generator_model, sentence_tokenizer, sentence_model_config
+    del translator, opus_tokenizer, story_generator_model, sentence_tokenizer, sentence_model_config
     torch.cuda.empty_cache()
 
     return data
@@ -368,7 +410,7 @@ base_model = AutoModelForCausalLM.from_pretrained(
     quantization_config=QUANTIZATION_CONFIG,
     device_map="auto",
     max_memory=MAX_MEMORY,
-    dtype=torch.half,
+    dtype=torch.bfloat16,
     low_cpu_mem_usage=False,
     offload_folder="./offload",
     trust_remote_code=True,
@@ -467,7 +509,7 @@ training_arguments = SFTConfig(
 trainer = SFTTrainer(
     model=model,
     train_dataset=dataset,
-    peft_config=PEFT_CONFIG,
+    # peft_config=PEFT_CONFIG, # rocm esetén kell
     processing_class=tokenizer,
     args=training_arguments,
 )

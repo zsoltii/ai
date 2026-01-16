@@ -13,25 +13,25 @@ log_available_gpus()
 #model_id = "mistralai/Mistral-7B-Instruct-v0.2"
 model_id = "mistralai/Mistral-7B-Instruct-v0.3"
 
-max_memory = {
-    0: "14Gib", # Reduce memory allocation for GPU 0
-    "cpu": "55Gib"
-}
+# max_memory = {
+#     0: "14Gib", # Reduce memory allocation for GPU 0
+#     "cpu": "55Gib"
+# }
 
 os.makedirs("./offload", exist_ok=True)
 
-print("Using max_memory config:", max_memory)
+# print("Using max_memory config:", max_memory)
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     device_map="auto",  # Engedélyezi az automatikus elosztást a GPU-k és CPU között.
-    max_memory=max_memory,
+    # max_memory=max_memory,
     dtype=torch.half,
-    low_cpu_mem_usage=False,
-    offload_folder="./offload", # Engedélyezi az ideiglenes mentést (offloading) diszkre, ha a CPU RAM elfogy.
+    # low_cpu_mem_usage=False,
+    # offload_folder="./offload", # Engedélyezi az ideiglenes mentést (offloading) diszkre, ha a CPU RAM elfogy.
 )
 
-print(f"VRAM elosztás: {max_memory}")
+# print(f"VRAM elosztás: {max_memory}")
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
