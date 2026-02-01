@@ -1,12 +1,13 @@
 import os, sys
+import time
+from threading import Thread
 
 # Ezt a részt megtartjuk a környezet beállításához
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import argparse
 import torch
-from transformers import pipeline
-from transformers import AutoTokenizer, AutoModelForCausalLM,  BitsAndBytesConfig, AutoConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM,  BitsAndBytesConfig, AutoConfig, TextIteratorStreamer
 
 # Feltételezve, hogy ez a segédprogram bejelentkezik a Hugging Face-re
 from util.hfh_login import hfh_login
@@ -86,19 +87,6 @@ tokenizer.chat_template = LLAMA_3_TEMPLATE
 print("Modell betöltve. A modell elhelyezkedése:")
 print(model.hf_device_map)
 
-# Pipeline inicializálása
-pipe = pipeline(
-    "text-generation",
-    model=model,
-    tokenizer=tokenizer,
-    # Fontos, hogy a 'return_full_text' False legyen, ha csak a generált választ akarjuk
-    return_full_text=False,
-    # További beállítások:
-    # do_sample=True, # Engedélyezi a mintavételezést
-    # top_p=0.9,
-    # temperature=0.6,
-)
-
 
 SYSTEM_PROMPT = "Egy segítőkész és barátságos mesterséges intelligencia asszisztens vagy."
 USER_PROMPT = "Készíts egy rövid Python kódot, amely kiszámítja a Fibonacci sorozat első 10 elemét!"
@@ -127,10 +115,59 @@ print("-" * 50)
 
 print("⏳ Válasz generálása...")
 
-result = pipe(prompt, max_new_tokens=4096, do_sample=True, pad_token_id=tokenizer.eos_token_id)
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-generated_text = result[0]['generated_text']
+streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
-print("✅ Generált Válasz:")
-print(generated_text)
-print("-" * 50)
+# Generálási paraméterek
+temperature = 1.2
+top_p = 0.95
+top_k = 60
+repetition_penalty = 1.15
+max_new_tokens = 4096
+
+generation_kwargs = dict(
+    input_ids=inputs.input_ids,
+    attention_mask=inputs.attention_mask,
+    streamer=streamer,
+    max_new_tokens=max_new_tokens,
+    temperature=temperature,
+    top_p=top_p,
+    top_k=top_k,
+    repetition_penalty=repetition_penalty,
+    do_sample=True,
+    pad_token_id=tokenizer.eos_token_id,
+    eos_token_id=tokenizer.eos_token_id,
+)
+
+start_time = time.time()
+thread = Thread(target=model.generate, kwargs=generation_kwargs)
+thread.start()
+
+print("AI válasz:", end=" ", flush=True)
+
+generated_text = ""
+for new_text in streamer:
+    print(new_text, end="", flush=True)
+    generated_text += new_text
+
+thread.join()
+end_time = time.time()
+
+print() # Új sor a végén
+
+# Statisztika
+generated_tokens = tokenizer.encode(generated_text)
+num_tokens = len(generated_tokens)
+duration = end_time - start_time
+tps = num_tokens / duration if duration > 0 else 0
+
+print(f"\n--- Statisztika ---")
+print(f"Generált tokenek száma: {num_tokens}")
+print(f"Sebesség: {tps:.2f} token/másodperc")
+print(f"Időtartam: {duration:.2f} másodperc")
+print(f"Temperature: {temperature}")
+print(f"Top P: {top_p}")
+print(f"Top K: {top_k}")
+print(f"Repetition Penalty: {repetition_penalty}")
+print(f"EOS Token ID: {tokenizer.eos_token_id}")

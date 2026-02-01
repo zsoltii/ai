@@ -3,6 +3,7 @@ import sys
 import re
 import shutil
 import time
+import csv
 
 ROLE_USER = "Write me a random English short story. The sentences long must be maximum 60 words!"
 ROLE_SYSTEM = ""
@@ -101,7 +102,7 @@ STORY_GENERATOR_MODELS = {
 
 STORY_GENERATOR_MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
 GENERATION_BATCH_SIZE = 16
-STORY_COUNT = GENERATION_BATCH_SIZE * 16
+STORY_COUNT = GENERATION_BATCH_SIZE * 3600
 
 PER_DEVICE_TRAIN_BATCH_SIZE = 10
 GRADIENT_ACCUMULATION_STEPS = 4
@@ -236,6 +237,14 @@ def generate_translation_dataset(story_count, batch_size):
     print(f"\n{STORY_GENERATOR_MODEL_ID} Modell betöltve. A modell elhelyezkedése:")
     print(story_generator_model.hf_device_map)
 
+    # --- CSV kimenet előkészítése ---
+    csv_path = os.path.join(os.path.dirname(__file__), "../text/hu/csv/en-hu-generated-story-sentences-opus.csv")
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    csv_file = open(csv_path, 'w', encoding='utf-8', newline='')
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(['en', 'hu'])
+    print(f"Generált mondatok mentése ide: {csv_path}")
+
     # --- mondatok generálása batch-ekben ---
     num_batches = math.ceil(story_count / batch_size)
     with tqdm(total=story_count, desc="Adathalmaz generálása", unit="történet") as pbar:
@@ -368,10 +377,14 @@ def generate_translation_dataset(story_count, batch_size):
                 for idx, sent in zip(valid_indices, decoded_sentences):
                     all_hu_sentences[idx] = sent
 
+            sentences_saved_in_batch = 0
             for en_sentence, hu_sentence in zip(all_en_sentences, all_hu_sentences):
                 if not hu_sentence: # Skip empty translations (e.g. too long)
                     continue
-                    
+                
+                csv_writer.writerow([en_sentence, hu_sentence])
+                sentences_saved_in_batch += 1
+                
                 structured_text = (
                     "instruction: Translate the following English sentence to Hungarian\n"
                     f"input-english: {en_sentence}\n"
@@ -382,9 +395,12 @@ def generate_translation_dataset(story_count, batch_size):
                 print(f" - Hungarian sentence: {hu_sentence}")
                 data.append({"text": structured_text})
             
+            csv_file.flush()
+            print(f"Batch saved to CSV: {sentences_saved_in_batch} sentences.")
             generated_story_count += len(decoded_stories)
             pbar.update(len(decoded_stories))
 
+    csv_file.close()
     del translator, opus_tokenizer, story_generator_model, sentence_tokenizer, sentence_model_config
     torch.cuda.empty_cache()
 

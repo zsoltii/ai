@@ -76,13 +76,25 @@ print("Generálás folyamatban...")
 
 streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
 
+# Generálási paraméterek
+temperature = 1.2
+top_p = 0.95
+top_k = 60
+repetition_penalty = 1.15
+max_new_tokens = 8096
+
 generation_kwargs = dict(
     input_ids=inputs.input_ids,
     attention_mask=inputs.attention_mask,
     streamer=streamer,
-    max_new_tokens=8096,
+    max_new_tokens=max_new_tokens,
+    temperature=temperature,
+    top_p=top_p,
+    top_k=top_k,
+    repetition_penalty=repetition_penalty,
     do_sample=True,
-    pad_token_id=tokenizer.eos_token_id
+    pad_token_id=tokenizer.eos_token_id,
+    eos_token_id=tokenizer.eos_token_id,
 )
 
 start_time = time.time()
@@ -111,3 +123,8 @@ print(f"\n--- Statisztika ---")
 print(f"Generált tokenek száma: {num_tokens}")
 print(f"Sebesség: {tps:.2f} token/másodperc")
 print(f"Időtartam: {duration:.2f} másodperc")
+print(f"Temperature: {temperature}")
+print(f"Top P: {top_p}")
+print(f"Top K: {top_k}")
+print(f"Repetition Penalty: {repetition_penalty}")
+print(f"EOS Token ID: {tokenizer.eos_token_id}")

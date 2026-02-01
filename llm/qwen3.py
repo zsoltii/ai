@@ -1,10 +1,11 @@
 import os
 import sys
+import time
+from threading import Thread
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import torch
-from threading import Thread
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, AutoConfig, TextIteratorStreamer
 
 from util.finetune import QUANTIZATION_CONFIG
@@ -65,12 +66,56 @@ inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 print("\nGenerálás folyamatban a finomhangolt modellel...")
 
 streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
-generation_kwargs = dict(**inputs, streamer=streamer, max_new_tokens=1024*4, do_sample=True)
 
+# Generálási paraméterek
+temperature = 1.2
+top_p = 0.95
+top_k = 60
+repetition_penalty = 1.15
+max_new_tokens = 1024*4
+
+generation_kwargs = dict(
+    input_ids=inputs.input_ids,
+    attention_mask=inputs.attention_mask,
+    streamer=streamer,
+    max_new_tokens=max_new_tokens,
+    temperature=temperature,
+    top_p=top_p,
+    top_k=top_k,
+    repetition_penalty=repetition_penalty,
+    do_sample=True,
+    pad_token_id=tokenizer.eos_token_id,
+    eos_token_id=tokenizer.eos_token_id,
+)
+
+start_time = time.time()
 thread = Thread(target=model.generate, kwargs=generation_kwargs)
 thread.start()
 
-print("\n--- AI VÁLASZ ---")
+print("AI válasz:", end=" ", flush=True)
+
+generated_text = ""
 for new_text in streamer:
     print(new_text, end="", flush=True)
-print()
+    generated_text += new_text
+
+thread.join()
+end_time = time.time()
+
+print() # Új sor a végén
+
+# Statisztika
+generated_tokens = tokenizer.encode(generated_text)
+num_tokens = len(generated_tokens)
+duration = end_time - start_time
+tps = num_tokens / duration if duration > 0 else 0
+
+print(f"\n--- Statisztika ---")
+print(f"Generált tokenek száma: {num_tokens}")
+print(f"Sebesség: {tps:.2f} token/másodperc")
+print(f"Időtartam: {duration:.2f} másodperc")
+print(f"Temperature: {temperature}")
+print(f"Top P: {top_p}")
+print(f"Top K: {top_k}")
+print(f"Repetition Penalty: {repetition_penalty}")
+print(f"EOS Token ID: {tokenizer.eos_token_id}")

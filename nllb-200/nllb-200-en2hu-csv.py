@@ -87,7 +87,7 @@ TARGET_LANGUAGE = "hun_Latn"
 tokenizer.src_lang = SOURCE_LANGUAGE
 
 INPUT_FILE = "../text/hu/csv/en-pl.csv"
-OUTPUT_FILE =  "../text/hu/csv/en-hu.csv"
+OUTPUT_FILE =  "../text/hu/csv/en-hu-nllb-200.csv"
 BATCH_SIZE = 256 # --- SPEEDUP: Set batch size. Adjust based on your VRAM. ---
 
 # Count rows in the input CSV
