@@ -15,7 +15,7 @@ from ctranslate2.converters import TransformersConverter
 # --- Configuration Constants ---
 
 # Maximális szószám egy mondatban. Ennél hosszabb mondatokat a script üresre cserél és nem fordít le.
-MAX_WORDS_LENGTH = 450
+MAX_WORDS_LENGTH = 400
 
 # A Hugging Face modell azonosítója (NLLB-200 distilled 1.3B változat).
 MODEL_NAME = "facebook/nllb-200-distilled-1.3B"
