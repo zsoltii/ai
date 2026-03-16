@@ -50,10 +50,10 @@ GRADIENT_ACCUMULATION_STEPS = 2
 NUM_EPOCHS = 4
 
 # --- Memória és Offload beállítások ---
-MAX_MEMORY = {
-    0: "14Gib",  # Memória korlát a 0-s GPU-ra
-    "cpu": "85Gib"  # Memória korlát a CPU-ra (offload esetén)
-}
+# MAX_MEMORY = {
+#     0: "14Gib",  # Memória korlát a 0-s GPU-ra
+#     "cpu": "85Gib"  # Memória korlát a CPU-ra (offload esetén)
+# }
 os.makedirs("./offload", exist_ok=True)
 print("max_memory konfiguráció használata:", MAX_MEMORY)
 
@@ -63,7 +63,7 @@ base_model = AutoModelForCausalLM.from_pretrained(
     BASE_MODEL_ID,
     quantization_config=QUANTIZATION_CONFIG,
     device_map="auto",
-    max_memory=MAX_MEMORY,
+    # max_memory=MAX_MEMORY,
     dtype=torch.bfloat16,
     low_cpu_mem_usage=False,
     offload_folder="./offload",

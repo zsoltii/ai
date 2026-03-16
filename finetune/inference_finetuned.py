@@ -23,12 +23,12 @@ NEW_MODEL_NAME = create_new_model_name(BASE_MODEL_ID, "finetuned")
 ADAPTER_MODEL_PATH = "./" + NEW_MODEL_NAME
 
 # --- Memória és Offload beállítások ---
-max_memory = {
-    0: "14Gib", # Memória korlát a 0-s GPU-ra
-    "cpu": "85Gib" # Memória korlát a CPU-ra (offload esetén)
-}
+# max_memory = {
+#     0: "14Gib", # Memória korlát a 0-s GPU-ra
+#     "cpu": "85Gib" # Memória korlát a CPU-ra (offload esetén)
+# }
 os.makedirs("./offload", exist_ok=True)
-print("Using max_memory config:", max_memory)
+# print("Using max_memory config:", max_memory)
 
 # --- Kvantálási Konfiguráció (részletes) ---
 # A modell eredeti kvantálási sémájának felülbírálása a konzisztencia érdekében
@@ -45,7 +45,7 @@ base_model = AutoModelForCausalLM.from_pretrained(
     config=config,
     quantization_config=QUANTIZATION_CONFIG,
     device_map="auto",
-    max_memory=max_memory,
+    # max_memory=max_memory,
     dtype=torch.half,
     low_cpu_mem_usage=False,
     offload_folder="./offload",
@@ -81,8 +81,8 @@ else:
     print("Új adapter sikeresen létrehozva.")
     print("A modell felkészítve a PEFT (LoRA) tanításra.")
 
-print("\nModell betöltve. A modell elhelyezkedése:")
-print(model.hf_device_map)
+# print("\nModell betöltve. A modell elhelyezkedése:")
+# print(model.hf_device_map)
 
 messages = [
     {"role": "system", "content": "Te egy segítőkész AI asszisztens vagy. Mindig magyarul válaszolj!"},

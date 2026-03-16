@@ -19,9 +19,11 @@ MAX_WORDS_LENGTH = 400
 
 # A Hugging Face modell azonosítója (NLLB-200 distilled 1.3B változat).
 MODEL_NAME = "facebook/nllb-200-distilled-1.3B"
+#MODEL_NAME = "facebook/nllb-200-3.3B"
 
 # A konvertált CTranslate2 modell mentési helye (könyvtár).
 CT2_MODEL_PATH = "nllb-200-distilled-1.3B-ct2"
+#CT2_MODEL_PATH = "nllb-200-3.3B-ct2"
 
 # A forrásnyelv kódja (NLLB formátum).
 SOURCE_LANGUAGE = "eng_Latn"
@@ -244,7 +246,7 @@ with open(INPUT_FILE, "r", encoding="utf-8", newline='') as infile, \
                     chunk_rows.append(next(reader))
                 except StopIteration:
                     break
-            
+
             if not chunk_rows:
                 break
 

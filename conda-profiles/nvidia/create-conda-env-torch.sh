@@ -16,9 +16,9 @@ echo "Installing PyTorch ${TORCH_VERSION} support..."
 conda run -n ${ENV_NAME} pip install torch torchvision torchaudio pytorch_triton
 echo "Installing additional dependencies..."
 
-conda run -n ${ENV_NAME} pip install sentencepiece transformers hf_xet accelerate diffusers protobuf xformers sacremoses peft scipy backoff peft datasets trl bitsandbytes ctranslate2
+conda run -n ${ENV_NAME} pip install sentencepiece transformers hf_xet accelerate diffusers protobuf xformers sacremoses peft scipy backoff peft datasets trl bitsandbytes ctranslate2 ollama
 
 # clear huggingface model cache
-#rm -rf ~/.cache/huggingface/hub/
+# rm -rf ~/.cache/huggingface/hub/
 
 echo "Conda environment '${ENV_NAME}' with ${TORCH_VERSION} is set up successfully."

@@ -29,8 +29,8 @@ from util.hfh_login import hfh_login
 from util.finetune import should_resume_from_checkpoint, create_new_model_name, get_last_checkpoint, \
     QUANTIZATION_CONFIG, RESULTS_DIRECTORY, PEFT_CONFIG
 
-# hfh_login()
-# log_available_gpus()
+hfh_login()
+log_available_gpus()
 
 # --- Modell és Tokenizer beállítások ---
 # --- Modell és Tokenizer beállítások ---
